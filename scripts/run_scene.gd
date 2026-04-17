@@ -17,12 +17,12 @@ const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd"
 @onready var progress_label: Label = $Margin/VBox/Footer/ProgressLabel
 @onready var back_button: Button = $Margin/VBox/Footer/BackButton
 
-var world_simulation: WorldSimulation
-var event_director: EventDirector
-var meta_progression: MetaProgression
-var campaign_manager: CampaignManager
-var metrics_tracker: MetricsTracker
-var platform_profile: PlatformProfile
+var world_simulation
+var event_director
+var meta_progression
+var campaign_manager
+var metrics_tracker
+var platform_profile
 
 var config: Dictionary = {}
 var events_data: Array = []
@@ -108,7 +108,6 @@ func _render_current_event() -> void:
 	for choice in event_data.get("choices", []):
 		var button := Button.new()
 		button.text = String(choice.get("label", "Choose"))
-		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.custom_minimum_size = Vector2(min_size.x, min_size.y)
 		button.pressed.connect(_on_choice_selected.bind(choice))
 		choices_container.add_child(button)

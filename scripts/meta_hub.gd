@@ -10,9 +10,9 @@ const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd"
 @onready var play_again_button: Button = $Margin/VBox/Actions/PlayAgainButton
 @onready var main_menu_button: Button = $Margin/VBox/Actions/MainMenuButton
 
-var meta_progression: MetaProgression
+var meta_progression
 var tech_data: Array = []
-var platform_profile: PlatformProfile
+var platform_profile
 
 
 func _ready() -> void:
