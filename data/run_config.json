@@ -1,0 +1,28 @@
+{
+  "run_duration_minutes": 10,
+  "turn_duration_seconds": 25,
+  "turns_per_run": 24,
+  "decisions_per_turn_min": 3,
+  "decisions_per_turn_max": 4,
+  "regions_total": 12,
+  "starting_values": {
+    "stability": 60,
+    "influence": 45,
+    "resources": 35,
+    "crisis": 25,
+    "control_regions": 2
+  },
+  "win_conditions": {
+    "target_control_regions": 8,
+    "max_crisis_for_win": 60
+  },
+  "lose_conditions": {
+    "stability_below": 10,
+    "crisis_above": 90
+  },
+  "meta_rewards": {
+    "base_credits": 20,
+    "win_bonus": 50,
+    "chapter_bonus": 20
+  }
+}

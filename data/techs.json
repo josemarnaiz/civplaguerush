@@ -1,0 +1,23 @@
+[
+  {
+    "id": "rapid_logistics",
+    "name": "Rapid Logistics",
+    "description": "Improves resource efficiency in every run.",
+    "cost": 40,
+    "effects": { "resources_per_turn": 1 }
+  },
+  {
+    "id": "civic_resilience",
+    "name": "Civic Resilience",
+    "description": "Raises baseline stability at run start.",
+    "cost": 60,
+    "effects": { "start_stability": 8 }
+  },
+  {
+    "id": "silent_network",
+    "name": "Silent Network",
+    "description": "Passive crisis control from intelligence systems.",
+    "cost": 80,
+    "effects": { "crisis_decay": 1 }
+  }
+]

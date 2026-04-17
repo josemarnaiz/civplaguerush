@@ -1,0 +1,97 @@
+[
+  {
+    "id": "food_shortage",
+    "title": "Food Shortage",
+    "description": "Crop failure is spreading unrest in frontier regions.",
+    "choices": [
+      {
+        "label": "Open emergency imports",
+        "effects": { "resources": -10, "stability": 8, "crisis": -4 }
+      },
+      {
+        "label": "Ration aggressively",
+        "effects": { "resources": 3, "stability": -6, "control_regions": -1, "crisis": 6 }
+      },
+      {
+        "label": "Invest in hydro farms",
+        "effects": { "resources": -6, "influence": 5, "stability": 4 }
+      }
+    ]
+  },
+  {
+    "id": "border_uprising",
+    "title": "Border Uprising",
+    "description": "Two peripheral regions threaten to break away.",
+    "choices": [
+      {
+        "label": "Send negotiators",
+        "effects": { "influence": -5, "stability": 6, "control_regions": 1 }
+      },
+      {
+        "label": "Deploy enforcers",
+        "effects": { "resources": -4, "control_regions": 1, "crisis": 8 }
+      },
+      {
+        "label": "Grant local autonomy",
+        "effects": { "stability": 4, "influence": 4, "control_regions": -1, "crisis": -2 }
+      }
+    ]
+  },
+  {
+    "id": "info_leak",
+    "title": "Information Leak",
+    "description": "Your strategic doctrine has leaked to rival blocs.",
+    "choices": [
+      {
+        "label": "Silence the channels",
+        "effects": { "crisis": 5, "influence": 4, "stability": -3 }
+      },
+      {
+        "label": "Spin it as transparency",
+        "effects": { "influence": 7, "resources": -3, "crisis": -3 }
+      },
+      {
+        "label": "Counter-intelligence push",
+        "effects": { "resources": -6, "crisis": -5, "stability": 2 }
+      }
+    ]
+  },
+  {
+    "id": "pandemic_wave",
+    "title": "Pandemic Wave",
+    "description": "A new wave hits logistics and morale across your network.",
+    "choices": [
+      {
+        "label": "Lock down trade hubs",
+        "effects": { "resources": -8, "crisis": -8, "stability": -2 }
+      },
+      {
+        "label": "Mass rapid treatment",
+        "effects": { "resources": -10, "stability": 6, "crisis": -4 }
+      },
+      {
+        "label": "Let regions self-manage",
+        "effects": { "resources": 4, "stability": -6, "crisis": 7 }
+      }
+    ]
+  },
+  {
+    "id": "golden_opportunity",
+    "title": "Golden Opportunity",
+    "description": "A neutral region offers allegiance in exchange for support.",
+    "choices": [
+      {
+        "label": "Pay the support package",
+        "effects": { "resources": -8, "control_regions": 2, "influence": 3 }
+      },
+      {
+        "label": "Offer a defense pact",
+        "effects": { "influence": -4, "control_regions": 1, "stability": 3 }
+      },
+      {
+        "label": "Decline for now",
+        "effects": { "resources": 2, "influence": -3 }
+      }
+    ]
+  }
+]

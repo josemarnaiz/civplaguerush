@@ -1,0 +1,25 @@
+{
+  "chapter_id": "chapter_01_echoes_of_ash",
+  "title": "Chapter 1: Echoes of Ash",
+  "intro": "After the Great Outbreak, your coalition rises from the shattered cities. Every region you stabilize feeds your influence, but every harsh decision spreads fear.",
+  "primary_goal": "Finish one run with at least 6 controlled regions and under 70 crisis.",
+  "unlock_on_complete": "unlock_event_tier_2",
+  "milestones": [
+    {
+      "id": "secure_four_regions",
+      "description": "Control 4 regions in one run.",
+      "reward_credits": 20
+    },
+    {
+      "id": "hold_crisis_line",
+      "description": "End a run with crisis below 55.",
+      "reward_credits": 25
+    },
+    {
+      "id": "chapter_clear",
+      "description": "Meet the primary chapter objective.",
+      "reward_credits": 40
+    }
+  ],
+  "epilogue": "The coalition survives, but whispers of a rival doctrine surface beyond the northern arcologies."
+}
