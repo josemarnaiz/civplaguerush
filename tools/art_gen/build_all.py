@@ -15,6 +15,7 @@ import gen_biomes
 import gen_event_icons
 import gen_infection
 import gen_title
+import gen_ornaments
 import gen_preview
 
 
@@ -38,6 +39,8 @@ def main() -> None:
     gen_infection.generate()
     print("== title logo ==")
     gen_title.build()
+    print("== ornaments ==")
+    gen_ornaments.generate()
     print("== preview ==")
     gen_preview.build_preview()
     print("\nAll art regenerated.")
