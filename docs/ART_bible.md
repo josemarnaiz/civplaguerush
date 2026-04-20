@@ -195,9 +195,10 @@ Antes de dar un asset por "done":
 | Escena | Elementos art-integrados |
 |--------|--------------------------|
 | MainMenu | `title_logo` (CIVPLAGUERUSH), 2× divisores, `ChapterPanel` con marco dark, botones gold |
-| RunScene | Mapa orgánico con 12 biomas + sigilo de plaga + rosa de los vientos, HUD de 5 badges con icons (columna, corona, cáliz, calavera, estandarte), panel de evento con icon 40×40, footer con `Main Menu` |
+| RunScene | Mapa orgánico con 12 biomas + sigilo de plaga + rosa de los vientos, HUD de 5 badges con icons (columna, corona, cáliz, calavera, estandarte), panel de evento con **retrato de consejero 64×64** + icon 36×36, footer con `Main Menu` |
 | MetaHub | Título `ASHEN ARCHIVE`, cáliz + créditos, 2× divisores, tech list en panel dark, `Play Again` / `Main Menu` |
 | RegionMap (custom draw) | Ver sección 7 |
+| Consejeros (EventPanel) | Ver sección 8 |
 
 **Pipeline generador** (`python tools/art_gen/build_all.py`) regenera toda la galería desde código.
 
@@ -271,5 +272,58 @@ misma doble-costa (halo + dark) y shadow offset que los continentes.
 - **Flash de pérdida de control** (existente): anillo R4 que fade over 1.2s.
 
 ### 7.6 Layout final
-- `Vector2(0, 220)` altura mínima del RegionMap en RunScene (ajustada para
-  que cabecera + HUD + evento + footer fit en 720p sin overflow).
+- `Vector2(0, 190)` altura mínima del RegionMap en RunScene (ajustada para
+  que cabecera + HUD + evento con consejero + footer fit en 720p sin overflow).
+
+---
+
+## 8. Consejo — retratos 64×64 (`tools/art_gen/gen_advisors.py`)
+
+Seis arquetipos del Consejo Ashen. Todos comparten un mismo framing (cabeza
+centrada en x=32, cuello y hombros anclados en y=32) y una **medalla colgante
+dorada** en el centro del pecho (`_collar_insignia`) — esto los une como casta
+decadente unificada. La piedra central del medallón cambia según el rol
+(R3 para diplomacia, R4 para peste, B3 para guerra, O4 para arcano, D3 para
+sombra, O2 para ingeniería).
+
+### 8.1 Roster
+
+| Slug | Arquetipo | Silueta distintiva | Eventos que "habla" |
+|------|-----------|--------------------|---------------------|
+| `chancellor` | Diplomático / Canciller | Circlete dorado de 3 picos + barba + cadena de oficio | `golden_opportunity`, `mass_migration` |
+| `plaguewright` | Doctor de la peste | Máscara de cuero con pico + lentes de latón + capucha | `pandemic_wave`, `outbreak_focus` |
+| `marshal` | Mariscal militar | Yelmo acero con penacho R3 + cicatriz + pauldrones | `border_uprising`, `frontier_uprising` |
+| `arcanist` | Arcanista / Científico | Capucha oscura + tercer ojo dorado + lapels bordados | `cure_trial` |
+| `shadow` | Jefe de espías | Capucha profunda que traga la cara + 2 destellos rojos | `info_leak`, `defector_cell`, `sabotage_strike` |
+| `architect` | Ingeniero / Logística | Gorra cuero + goggles redondos de latón + bigote + arneses | `food_shortage`, `relief_mission` |
+
+Archivos: `assets/art/advisors/advisor_<slug>.png`.
+
+### 8.2 Construcción técnica
+- Piel: `C2`/`C3` con sombra `C1` en el lado derecho (luz top-left coherente).
+- Cuello: cilindro 7 px ancho × 6 px alto entre mentón y clavícula.
+- Hombros: perfil gradiente (half-width 6→31 px) con highlight `robe_hi` en las
+  dos primeras filas y shadow `robe_lo` en las tres finales.
+- Escote V: notch de 5 px en el centro que abre la túnica al cuello.
+- Iluminación consistente: todo lo que mira arriba a la izquierda se highlight
+  un tono, lo que mira al suroeste se sombrea.
+
+### 8.3 Integración en RunScene
+Cada evento mapea 1:1 a un advisor vía `ADVISOR_PATH_BY_ID` en
+`scripts/run_scene.gd`. El retrato se pinta en un **PanelContainer 72×72** a la
+izquierda del título del evento; el event_icon (36×36) sigue funcionando como
+etiqueta de categoría a la derecha.
+
+### 8.4 Animación de reveal (`_animate_event_reveal`)
+Cada vez que `_render_current_event()` construye un evento nuevo:
+1. **EventRow** entra desde la derecha (+24 px → 0 px, 0.34 s, cubic-out) con
+   fade 0 → 1 en 0.28 s.
+2. **AdvisorPortrait** pulsa con back-out de 0.86 → 1.0 en 0.42 s (pequeño
+   pop de entrada que llama la atención al narrador).
+3. **Botones de choice** se revelan en cascada: cada uno fade 0 → 1 y sube
+   +8 px → 0 px con delay `0.10 + 0.08 × índice` s. Lee el ojo de arriba
+   abajo sin robarle protagonismo al retrato.
+
+El efecto conjunto es el de una carta girándose y revelando quién habla +
+qué opciones tienes, manteniendo el mood "barajando el destino" sin cruzar
+a animación caricaturesca.

@@ -64,7 +64,7 @@ text = "Chapter"
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
-custom_minimum_size = Vector2(0, 220)
+custom_minimum_size = Vector2(0, 190)
 
 [node name="StatePanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
@@ -172,36 +172,54 @@ vertical_alignment = 1
 [node name="EventPanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+clip_contents = true
 
-[node name="EventVBox" type="VBoxContainer" parent="Margin/VBox/EventPanel"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="EventHeader" type="HBoxContainer" parent="Margin/VBox/EventPanel/EventVBox"]
+[node name="EventRow" type="HBoxContainer" parent="Margin/VBox/EventPanel"]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="EventIcon" type="TextureRect" parent="Margin/VBox/EventPanel/EventVBox/EventHeader"]
+[node name="AdvisorSlot" type="PanelContainer" parent="Margin/VBox/EventPanel/EventRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(40, 40)
+size_flags_vertical = 4
+custom_minimum_size = Vector2(72, 72)
+
+[node name="AdvisorPortrait" type="TextureRect" parent="Margin/VBox/EventPanel/EventRow/AdvisorSlot"]
+layout_mode = 2
+custom_minimum_size = Vector2(64, 64)
 expand_mode = 1
 stretch_mode = 5
 texture_filter = 1
 
-[node name="EventTitle" type="Label" parent="Margin/VBox/EventPanel/EventVBox/EventHeader"]
+[node name="EventVBox" type="VBoxContainer" parent="Margin/VBox/EventPanel/EventRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="EventHeader" type="HBoxContainer" parent="Margin/VBox/EventPanel/EventRow/EventVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="EventIcon" type="TextureRect" parent="Margin/VBox/EventPanel/EventRow/EventVBox/EventHeader"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="EventTitle" type="Label" parent="Margin/VBox/EventPanel/EventRow/EventVBox/EventHeader"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 24
 text = "Event Title"
 vertical_alignment = 1
 
-[node name="EventDescription" type="Label" parent="Margin/VBox/EventPanel/EventVBox"]
+[node name="EventDescription" type="Label" parent="Margin/VBox/EventPanel/EventRow/EventVBox"]
 layout_mode = 2
 autowrap_mode = 2
 text = "Event Description"
 
-[node name="Choices" type="VBoxContainer" parent="Margin/VBox/EventPanel/EventVBox"]
+[node name="Choices" type="VBoxContainer" parent="Margin/VBox/EventPanel/EventRow/EventVBox"]
 layout_mode = 2
 theme_override_constants/separation = 8
 

@@ -17,10 +17,13 @@ const LOSS_ALERT_VOLUME_DB: float = -9.0
 @onready var stat_resources: Label = $Margin/VBox/StatePanel/StatsBox/Resources/Value
 @onready var stat_crisis: Label = $Margin/VBox/StatePanel/StatsBox/Crisis/Value
 @onready var stat_control: Label = $Margin/VBox/StatePanel/StatsBox/Control/Value
-@onready var event_icon: TextureRect = $Margin/VBox/EventPanel/EventVBox/EventHeader/EventIcon
-@onready var event_title_label: Label = $Margin/VBox/EventPanel/EventVBox/EventHeader/EventTitle
-@onready var event_description_label: Label = $Margin/VBox/EventPanel/EventVBox/EventDescription
-@onready var choices_container: VBoxContainer = $Margin/VBox/EventPanel/EventVBox/Choices
+@onready var event_panel: PanelContainer = $Margin/VBox/EventPanel
+@onready var event_row: HBoxContainer = $Margin/VBox/EventPanel/EventRow
+@onready var advisor_portrait: TextureRect = $Margin/VBox/EventPanel/EventRow/AdvisorSlot/AdvisorPortrait
+@onready var event_icon: TextureRect = $Margin/VBox/EventPanel/EventRow/EventVBox/EventHeader/EventIcon
+@onready var event_title_label: Label = $Margin/VBox/EventPanel/EventRow/EventVBox/EventHeader/EventTitle
+@onready var event_description_label: Label = $Margin/VBox/EventPanel/EventRow/EventVBox/EventDescription
+@onready var choices_container: VBoxContainer = $Margin/VBox/EventPanel/EventRow/EventVBox/Choices
 
 # Maps each event id (from data/events.json) to its event icon path.
 # Icons are optional; missing resources fall back to text-only header.
@@ -39,6 +42,25 @@ const EVENT_ICON_PATH_BY_ID: Dictionary = {
 	"mass_migration": "res://assets/art/events/event_migration.png",
 }
 const EVENT_ICON_FALLBACK_PATH: String = "res://assets/art/events/event_outbreak.png"
+
+# Maps event id -> advisor portrait that "narrates" this event. The advisor
+# thematically matches the event category (plague -> plaguewright, etc.) so
+# the council feels like a persistent cast reacting to the world.
+const ADVISOR_PATH_BY_ID: Dictionary = {
+	"food_shortage": "res://assets/art/advisors/advisor_architect.png",
+	"border_uprising": "res://assets/art/advisors/advisor_marshal.png",
+	"info_leak": "res://assets/art/advisors/advisor_shadow.png",
+	"pandemic_wave": "res://assets/art/advisors/advisor_plaguewright.png",
+	"golden_opportunity": "res://assets/art/advisors/advisor_chancellor.png",
+	"outbreak_focus": "res://assets/art/advisors/advisor_plaguewright.png",
+	"frontier_uprising": "res://assets/art/advisors/advisor_marshal.png",
+	"defector_cell": "res://assets/art/advisors/advisor_shadow.png",
+	"relief_mission": "res://assets/art/advisors/advisor_architect.png",
+	"sabotage_strike": "res://assets/art/advisors/advisor_shadow.png",
+	"cure_trial": "res://assets/art/advisors/advisor_arcanist.png",
+	"mass_migration": "res://assets/art/advisors/advisor_chancellor.png",
+}
+const ADVISOR_FALLBACK_PATH: String = "res://assets/art/advisors/advisor_chancellor.png"
 @onready var progress_label: Label = $Margin/VBox/Footer/ProgressLabel
 @onready var back_button: Button = $Margin/VBox/Footer/BackButton
 
@@ -192,6 +214,7 @@ func _render_current_event() -> void:
 		choices_container.add_child(button)
 
 	_render_state()
+	_animate_event_reveal()
 
 
 # --- Regional pick mode ----------------------------------------------------
@@ -217,9 +240,55 @@ func _end_region_pick_mode() -> void:
 
 func _assign_event_icon(event_data: Dictionary) -> void:
 	var id: String = String(event_data.get("id", ""))
-	var path: String = String(EVENT_ICON_PATH_BY_ID.get(id, EVENT_ICON_FALLBACK_PATH))
-	event_icon.texture = _safe_load_texture(path)
+	var icon_path: String = String(EVENT_ICON_PATH_BY_ID.get(id, EVENT_ICON_FALLBACK_PATH))
+	event_icon.texture = _safe_load_texture(icon_path)
 	event_icon.visible = event_icon.texture != null
+
+	var advisor_path: String = String(ADVISOR_PATH_BY_ID.get(id, ADVISOR_FALLBACK_PATH))
+	advisor_portrait.texture = _safe_load_texture(advisor_path)
+	advisor_portrait.visible = advisor_portrait.texture != null
+
+
+# --- Event reveal animation ------------------------------------------------
+# When a new event shows up, slide the whole panel in from the right by a few
+# pixels + fade. Advisor pops with a small scale punch. Choice buttons stagger
+# their fade-in so the player's eye tracks top-to-bottom.
+func _animate_event_reveal() -> void:
+	if not is_inside_tree():
+		return
+	# Kill any ongoing animation tweens so we don't stack them.
+	if event_row:
+		event_row.set_meta("_event_tween_generation", int(event_row.get_meta("_event_tween_generation", 0)) + 1)
+		event_row.modulate = Color(1, 1, 1, 0.0)
+		event_row.position = Vector2(24.0, 0.0)
+		var tw: Tween = create_tween()
+		tw.set_parallel(true)
+		tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(event_row, "modulate:a", 1.0, 0.28)
+		tw.tween_property(event_row, "position:x", 0.0, 0.34)
+
+	if advisor_portrait and advisor_portrait.visible:
+		advisor_portrait.pivot_offset = advisor_portrait.size * 0.5
+		advisor_portrait.scale = Vector2(0.86, 0.86)
+		var pt: Tween = create_tween()
+		pt.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		pt.tween_property(advisor_portrait, "scale", Vector2.ONE, 0.42)
+
+	# Stagger the choice buttons (they were just rebuilt in _render_current_event).
+	if choices_container:
+		var i: int = 0
+		for child in choices_container.get_children():
+			if child is Control:
+				var btn: Control = child
+				btn.modulate = Color(1, 1, 1, 0.0)
+				btn.position.y = 8.0
+				var delay: float = 0.10 + 0.08 * float(i)
+				var ct: Tween = create_tween()
+				ct.set_parallel(true)
+				ct.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+				ct.tween_property(btn, "modulate:a", 1.0, 0.25).set_delay(delay)
+				ct.tween_property(btn, "position:y", 0.0, 0.30).set_delay(delay)
+				i += 1
 
 
 func _display_text(source: String, clean_placeholders: bool, fallback: Dictionary) -> String:
