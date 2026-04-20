@@ -301,6 +301,8 @@ func _finalize_turn() -> void:
 	_emit_control_loss_feedback()
 	world_simulation.advance_turn()
 	_refresh_region_map()
+	if region_map and region_map.has_method("trigger_turn_flash"):
+		region_map.trigger_turn_flash(0.65)
 	var evaluation: Dictionary = world_simulation.evaluate_outcome()
 	if String(evaluation.get("outcome", "ongoing")) == "ongoing":
 		_start_turn()
