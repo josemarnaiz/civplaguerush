@@ -217,6 +217,7 @@ func _render_current_event() -> void:
 		# "flavour" of each option at a glance (force/diplomacy/science/etc.).
 		var tag: String = String(choice.get("tag", "")) if choice.has("tag") else _infer_choice_tag(choice)
 		_apply_choice_chip(button, tag)
+		_wire_choice_hover(button)
 		choices_container.add_child(button)
 
 	_render_state()
@@ -399,6 +400,29 @@ func _apply_choice_chip(button: Button, tag: String) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
+# Warm, subtle hover breathing for choice buttons. Keeps the UI feeling
+# reactive without jumping around the layout — only modulate is animated.
+func _wire_choice_hover(button: Button) -> void:
+	button.pivot_offset = button.size * 0.5
+	button.resized.connect(func(): button.pivot_offset = button.size * 0.5)
+	button.mouse_entered.connect(func(): _hover_choice(button, true))
+	button.mouse_exited.connect(func(): _hover_choice(button, false))
+
+
+func _hover_choice(button: Button, entering: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	var kill: Tween = button.get_meta("hover_tw", null)
+	if kill is Tween and kill.is_valid():
+		kill.kill()
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	var target_mod: Color = Color(1.08, 1.04, 0.96, 1.0) if entering else Color(1, 1, 1, 1)
+	tw.tween_property(button, "modulate", target_mod, 0.18)
+	button.set_meta("hover_tw", tw)
+
+
 # --- Stat delta floaters ---------------------------------------------------
 # Pops a short "+5" / "-3" label above each HUD stat whenever a decision
 # changes it. Colour-coded so crisis-up reads as bad and the rest read
@@ -549,13 +573,31 @@ func _finish_run(evaluation: Dictionary) -> void:
 	# Show the outcome overlay (Victory/Defeat/Timeout) before handing off to
 	# MetaHub. The overlay waits for user input or auto-advances after its
 	# internal hold, then signals `finished` so we can change scene.
-	var outcome: String = String(run_result.get("outcome", "ongoing"))
+	# `WorldSimulation.evaluate_outcome` emits "win/loss/timeout/ongoing" but the
+	# overlay dictionaries are keyed by "victory/chapter_cleared/defeat/loss/..."
+	# so translate here to keep the mood-specific title+subtitle+portrait wired.
+	var raw_outcome: String = String(run_result.get("outcome", "ongoing"))
+	var overlay_outcome: String = _overlay_outcome_for(raw_outcome, chapter_goal_completed)
 	if run_end_overlay and run_end_overlay.has_method("show_outcome"):
 		if not run_end_overlay.finished.is_connected(_on_run_end_finished):
 			run_end_overlay.finished.connect(_on_run_end_finished, CONNECT_ONE_SHOT)
-		run_end_overlay.show_outcome(outcome)
+		run_end_overlay.show_outcome(overlay_outcome)
 	else:
 		get_tree().change_scene_to_file("res://scenes/MetaHub.tscn")
+
+
+# Translates a WorldSimulation outcome ("win/loss/timeout/ongoing") into the
+# mood key expected by RunEndOverlay ("victory/chapter_cleared/defeat/timeout/
+# ongoing"). Keeping the translation here means the sim stays domain-pure and
+# the overlay keeps its narrative vocabulary.
+func _overlay_outcome_for(raw_outcome: String, chapter_goal_completed: bool) -> String:
+	match raw_outcome:
+		"win":
+			return "chapter_cleared" if chapter_goal_completed else "victory"
+		"loss":
+			return "defeat"
+		_:
+			return raw_outcome
 
 
 func _on_run_end_finished() -> void:

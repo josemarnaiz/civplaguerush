@@ -404,7 +404,7 @@ respiren pero no compitan con el logo central.
 prevalezca. Las techs se renderizan ahora como tarjetas horizontales con
 cuatro zonas:
 
-1. **Badge** (`*` verde si desbloqueada, `$` oro si asequible, `-` malva si no).
+1. **Badge** — icono 20×20 en placa circular (ver 9.7).
 2. **Info** — nombre a 18 pt + descripción autowrap a 13 pt modulate 0.82.
 3. **Pill de coste** — "NN cr" en O3/D3 según affordability.
 4. **Botón** — "UNLOCKED" (disabled) o "Unlock" (activo sólo si hay créditos).
@@ -427,3 +427,32 @@ strands rojos curvos que emanan del centroide. Características:
 Se dibuja como Pass 2d (después de coastlines y rings, antes de iconos de
 bioma y labels) para que los strands atraviesen el borde de la región pero
 queden bajo el texto y los biome icons.
+
+### 9.7 Tech badges 20×20 (`tools/art_gen/gen_tech_badges.py`)
+Sustituyen los placeholders `* / $ / -` por tres emblemas sobre placa
+circular plum con ring dorado tarnished. Cada badge comunica un estado sin
+necesidad de leer el coste:
+
+| Slug | Emblema | Estado |
+|------|--------|--------|
+| `badge_unlocked` | Estrella de cinco puntas O5 con corazón O4 | Tech ya adquirida — trofeo |
+| `badge_affordable` | Stack de tres monedas O2→O4 con chip R3 | Tienes créditos suficientes |
+| `badge_locked` | Eslabón de cadena B2/B3 partido + polvo C1 | Fuera de alcance / bloqueada |
+
+En `meta_hub.gd` el badge es un `TextureRect` 32×32 con
+`texture_filter = NEAREST`, así la escala preserva el pixel clean. El
+`stretch_mode = KEEP_ASPECT_CENTERED` permite que si algún día reescalamos
+la fila a 40 px, el badge no deforme.
+
+### 9.8 Title pulse del MainMenu (`main_menu.gd::_process`)
+El `TitleRow/Title` TextureRect respira con un sine de 1.4 rad/s:
+
+- **Escala** `1.0 ± 1.2%` (imperceptible hasta que los ojos se aclimatan).
+- **Modulate** tinte cálido variable sobre canales G/B, simulando el
+  resplandor O2 → O4 de una brasa asentándose. Nunca satura de color.
+- Pivot center recalculado en `resized` signal para que el pulse no empuje
+  el logo del eje cuando el layout responde a tamaños distintos.
+
+Combinado con el mural `menu_backdrop`, el resultado es que incluso en
+idle la pantalla inicial se siente como un fresco vivo donde la luz oscila
+lentamente sobre el Canciller.
