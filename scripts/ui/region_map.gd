@@ -484,27 +484,38 @@ func _build_offshore_archipelago(id: String, center: Vector2) -> void:
 
 
 func _generate_ocean_islets() -> void:
-	# Scatter small islets in the seas BETWEEN continents so the ocean doesn't
-	# look like empty rectangles. Positions are deterministic so they line up
-	# with the painted coastlines on every redraw.
+	# Scatter small decorative islets in the open sea around the single
+	# continent. Spots were picked against the current CONTINENT_OUTLINE so
+	# they always sit comfortably offshore. Points that (thanks to outline
+	# wobble) still fall inside the land are skipped.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 0xC0A57
-	# Seed spots: roughly on the latitudes of inter-continental seas.
 	var hot_spots: Array = [
-		# Upper sea (between row 0 and row 1)
-		Vector2(0.18, 0.40), Vector2(0.42, 0.41), Vector2(0.62, 0.39),
-		Vector2(0.80, 0.42),
-		# Atlantic-like gap in the middle row
-		Vector2(0.50, 0.54),
-		# Southern sea (between row 1 and row 2)
-		Vector2(0.12, 0.72), Vector2(0.33, 0.74), Vector2(0.56, 0.70),
-		Vector2(0.88, 0.73),
-		# Bottom fringe (below southern continents)
-		Vector2(0.22, 0.92), Vector2(0.68, 0.94),
+		# Northern sea corners (above continent)
+		Vector2(0.04, 0.04), Vector2(0.22, 0.02), Vector2(0.93, 0.08),
+		# Western deep sea (left of continent)
+		Vector2(0.02, 0.32), Vector2(0.03, 0.50), Vector2(0.02, 0.68),
+		# Eastern inner sea (right of continent bulge)
+		Vector2(0.95, 0.28), Vector2(0.97, 0.42), Vector2(0.95, 0.56),
+		Vector2(0.94, 0.70),
+		# Southern open ocean (below the continent)
+		Vector2(0.32, 0.94), Vector2(0.50, 0.96), Vector2(0.68, 0.94),
+		Vector2(0.82, 0.92),
+		# Between the main continent and the r10 archipelago
+		Vector2(0.02, 0.82), Vector2(0.20, 0.93),
 	]
+	var reference_outline: PackedVector2Array = PackedVector2Array()
+	if _continent_exteriors.size() > 0:
+		reference_outline = _continent_exteriors[0]
 	for spot in hot_spots:
 		var base: Vector2 = spot + Vector2(rng.randf_range(-0.012, 0.012),
 				rng.randf_range(-0.010, 0.010))
+		# Clamp to the canvas and skip any point that ended up inside the
+		# painted continent after wobble.
+		base.x = clampf(base.x, 0.01, 0.99)
+		base.y = clampf(base.y, 0.01, 0.99)
+		if reference_outline.size() >= 3 and Geometry2D.is_point_in_polygon(base, reference_outline):
+			continue
 		var rx: float = rng.randf_range(0.008, 0.016)
 		var ry: float = rng.randf_range(0.006, 0.011)
 		var islet: PackedVector2Array = _organic_blob(base, rx, ry, rng, 7)
