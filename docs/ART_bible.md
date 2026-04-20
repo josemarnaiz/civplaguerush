@@ -327,3 +327,73 @@ Cada vez que `_render_current_event()` construye un evento nuevo:
 El efecto conjunto es el de una carta girándose y revelando quién habla +
 qué opciones tienes, manteniendo el mood "barajando el destino" sin cruzar
 a animación caricaturesca.
+
+### 8.5 Nota de implementación: no tocar `position` en children de VBox
+El tween inicial usaba `position:y` para hacer un "slide up" de cada botón,
+pero un botón que vive dentro de un `VBoxContainer` pierde esa posición en
+cuanto el contenedor reordena (todos los botones colapsan a `y=0`). Desde
+que el chip es un `Button.icon`, incluso la fuerza del tween deja ver la
+colisión. Por eso la animación final **sólo** usa `modulate:a` — el layout
+lo decide el `VBoxContainer` y el chip/texto viajan limpios.
+
+---
+
+## 9. Floaters de stats, pantalla de fin de run, chips de choice y fondo de menú
+
+Cuatro capas de feedback visual que convierten cada decisión en un pequeño
+teatro cinematográfico.
+
+### 9.1 Stat floaters (`run_scene.gd::_emit_stat_floaters`)
+Cuando una elección modifica `world_state`, se dispara un floater por cada
+stat que cambia, anclado encima del icono HUD correspondiente:
+
+- **Verde G3** para positivos (salud/poder suben); **rojo R4** para negativos.
+- **Invertido** para `crisis`: subir crisis es rojo, bajarla es verde.
+- Outline D0 grueso (4 px) para que el número se lea sobre cualquier panel.
+- Anim 1.10 s: subida 42 px (cubic-out), fade tras 0.55 s.
+- Se parentan a un `CanvasLayer` con `layer=50` creado lazy, así nunca los
+  tapan overlays ni la run-end screen.
+
+### 9.2 Run-end overlay (`scripts/ui/run_end_overlay.gd` + `scenes/RunEndOverlay.tscn`)
+Pantalla dramática que se instancia como hijo del RunScene y permanece
+`visible = false` hasta que `_finish_run` llama `show_outcome(outcome)`:
+
+- **Victoria** → Canciller + título `VICTORY` (O4) + subtítulo narrativo.
+- **Derrota** → Plaguewright + título `DEFEAT` (R4) + rayos rojos girando.
+- **Timeout** → Arcanist + título `TIME OUT` (C4) en tono neutro.
+
+El overlay pinta en `_draw()` un abanico de rayos girando lentamente desde
+el centro (velocidad +0.15 rad/s en victoria, -0.10 rad/s en derrota) y
+anillos concéntricos con fade radial (O4/R4 según outcome). Tras 2.8 s de
+hold, o al hacer click/key, emite `finished` y RunScene cambia a MetaHub.
+
+### 9.3 Choice-tag chips (24×24, `tools/art_gen/gen_choice_chips.py`)
+Cinco emblemas octagonales con un ring dorado unificado. La cara D2
+aloja la silueta del arquetipo y todos comparten notches dorados en los
+puntos cardinales para que, pegados uno encima de otro en botones
+verticales, creen un ritmo visible:
+
+| Slug | Emblema | Momento de uso |
+|------|--------|----------------|
+| `tag_force` | Lanzas cruzadas sobre escudo R2 con remaches dorados | Opción agresiva: crisis ≥ +5 o controla regiones por la fuerza |
+| `tag_diplomacy` | Laurel verde + paloma C4 con ojo | Ganancia de estabilidad/influencia sin penalización |
+| `tag_science` | Retorta G2 con burbujas subiendo | Gastas recursos (-6 o más) para bajar crisis |
+| `tag_sacrifice` | Columna rota C3 + humo B3 ascendiendo | Pérdida explícita (stab ≤ -4 o regiones -1) |
+| `tag_economy` | Stack de 3 monedas con muesca de corona | Movimientos puramente económicos |
+
+La inferencia de tag vive en `_infer_choice_tag(choice)`; eventos
+existentes sin campo `tag` se categorizan solos. Cuando un evento futuro
+incluya un `"tag"` explícito en `data/events.json`, el script respeta ese
+valor sin re-inferir.
+
+### 9.4 Fondo de MainMenu (`tools/art_gen/gen_menu_backdrop.py`)
+Mural de 640×360 (x2 para llegar a 1280×720 nearest-neighbor) compuesto
+en cuatro bandas parallax-ready: cielo agrietado con chispazos O4,
+cinco arcos art-deco escalonados con el Canciller iluminado bajo el
+central, friso de doce peregrinos (uno por región del consejo) con
+ojos-speck O3, y piso de cenizas con grietas radiales. Sobre esto va un
+`BackdropShade` D0 α=0.35 para garantizar lectura del título.
+
+El backdrop se renderiza detrás del título vía `TextureRect` con
+`texture_filter = 1` (nearest) y `modulate` 0.78 para que las columnas
+respiren pero no compitan con el logo central.

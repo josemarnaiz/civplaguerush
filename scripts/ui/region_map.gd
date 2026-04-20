@@ -42,6 +42,9 @@ const TOOLTIP_TEXT: Color = Color(0.910, 0.831, 0.706, 1.0)    # C4 cream
 const TWEEN_SPEED: float = 6.5          # higher = snappier approach of display values
 const TOOLTIP_DELAY: float = 0.35       # seconds hovering before tooltip shows
 const BIOME_ICON_SIZE: float = 22.0     # drawn size of biome icon above region label
+const PLAGUE_TENDRIL_THRESHOLD: float = 50.0  # infection% at which tendrils appear
+const PLAGUE_TENDRIL_COLOR: Color = Color(0.851, 0.329, 0.306, 1.0)  # R4
+const PLAGUE_TENDRIL_CORE: Color = Color(0.698, 0.165, 0.204, 1.0)   # R3
 
 # Region id -> biome archetype. Texture path is assets/art/map/biome_<arch>.png.
 # Keep in sync with tools/art_gen/gen_biomes.py.
@@ -647,6 +650,13 @@ func _draw() -> void:
 		draw_polyline(ext_px, COAST_GLOW, 3.2, true)
 		draw_polyline(ext_px, COAST_COLOR, 1.6, true)
 
+	# Pass 2d: plague tendrils. For any region whose displayed infection is above
+	# PLAGUE_TENDRIL_THRESHOLD, emit a few thin curling strands from the centroid.
+	# Strands rotate slowly over _time and pulse in alpha so the heaviest
+	# infected regions always feel "alive with the Ash" without spamming
+	# particles. Deterministic per-region seed keeps silhouettes stable.
+	_draw_plague_tendrils(s)
+
 	# Pass 3a: biome icons (stacked above labels).
 	for r in _snapshot:
 		var bid: String = String(r.get("id", ""))
@@ -950,6 +960,69 @@ func _draw_shelf_halos(s: Vector2) -> void:
 			halo.append(Vector2((v.x + dir_x * expand) * s.x,
 					(v.y + dir_y * expand) * s.y))
 		draw_colored_polygon(halo, OCEAN_SHELF)
+
+
+func _draw_plague_tendrils(s: Vector2) -> void:
+	"""Curling red plague tendrils on heavily infected regions.
+
+	Each region above PLAGUE_TENDRIL_THRESHOLD emits 4-7 thin strands from its
+	centroid. Strands are drawn as N small line segments following a sine-
+	modulated polar path so they wiggle with _time. Intensity scales with
+	infection%, giving a clear progression from "sores" at 50% to a full
+	plague halo at 100%. Deterministic per-region seeds keep the composition
+	stable between frames.
+	"""
+	for r in _snapshot:
+		var id: String = String(r.get("id", ""))
+		if not _centroids.has(id):
+			continue
+		var display_inf: float = _display_for(id, "infection", float(int(r.get("infection", 0))))
+		if display_inf < PLAGUE_TENDRIL_THRESHOLD:
+			continue
+		var intensity: float = clampf((display_inf - PLAGUE_TENDRIL_THRESHOLD) /
+			(100.0 - PLAGUE_TENDRIL_THRESHOLD), 0.0, 1.0)
+
+		var c: Vector2 = _centroids[id] * s
+		# Per-region deterministic offset so tendrils on different regions
+		# wiggle out of phase with one another.
+		var seed: float = float(id.hash() & 0xFFFF) / 65535.0 * TAU
+		var n_strands: int = 4 + int(round(intensity * 3.0))
+		var base_len: float = 14.0 + intensity * 18.0
+		var core_alpha: float = 0.40 + 0.55 * intensity
+
+		for i in range(n_strands):
+			var ang0: float = TAU * float(i) / float(n_strands) + seed + _time * 0.35
+			# Tendril: 6 segment polyline following a wiggling arc.
+			var pts := PackedVector2Array()
+			var segs: int = 6
+			for k in range(segs + 1):
+				var t: float = float(k) / float(segs)
+				var reach: float = base_len * t
+				# Ondulation: sine wave applied to angle so the strand curls
+				# rather than shoots straight.
+				var ang: float = ang0 + sin(_time * 1.8 + i * 0.7 + t * 4.5) * 0.45 * intensity
+				# Slight pull back toward centre at the tail for a "snake" feel.
+				if t > 0.8:
+					reach *= (1.0 - (t - 0.8) * 0.6)
+				pts.append(c + Vector2(cos(ang) * reach, sin(ang) * reach * 0.85))
+			# Outer strand: R4 faint.
+			var outer: Color = PLAGUE_TENDRIL_COLOR
+			outer.a = clampf(0.25 + 0.45 * intensity, 0.0, 0.85)
+			draw_polyline(pts, outer, 2.2, true)
+			# Inner core: R3 for depth.
+			var inner: Color = PLAGUE_TENDRIL_CORE
+			inner.a = core_alpha
+			draw_polyline(pts, inner, 1.0, true)
+
+		# Central pustule: 2-ring dot pulsing with crisis.
+		var pulse: float = 0.5 + 0.5 * sin(_time * 3.1 + seed)
+		var pust_r: float = 2.4 + intensity * 2.6 + pulse * 0.7
+		var pust_col: Color = PLAGUE_TENDRIL_CORE
+		pust_col.a = 0.35 + 0.45 * intensity
+		draw_circle(c, pust_r, pust_col)
+		var pust_hi: Color = PLAGUE_TENDRIL_COLOR
+		pust_hi.a = 0.70 * intensity
+		draw_circle(c, pust_r * 0.55, pust_hi)
 
 
 func _draw_star(center: Vector2, r: float, color: Color) -> void:
