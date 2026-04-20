@@ -35,3 +35,8 @@ desktop.ini
 # Python tooling (art generators)
 __pycache__/
 *.pyc
+
+# Orphan copies occasionally created by tooling at the project root.
+# The canonical file lives at scripts/mcp_interaction_server.gd.
+/mcp_interaction_server.gd
+/mcp_interaction_server.gd.uid
