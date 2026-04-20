@@ -149,11 +149,11 @@ func _render_state() -> void:
 	var target: int = int(config.get("win_conditions", {}).get(
 		"target_control_regions", WorldSimulationClass.DEFAULT_TARGET_CONTROL_REGIONS))
 
-	stat_stability.text = str(int(s.get("stability", 0)))
-	stat_influence.text = str(int(s.get("influence", 0)))
-	stat_resources.text = str(int(s.get("resources", 0)))
-	stat_crisis.text = str(int(s.get("crisis", 0)))
-	stat_control.text = "%d / %d" % [int(s.get("control_regions", 0)), target]
+	_tween_stat_number(stat_stability, int(s.get("stability", 0)))
+	_tween_stat_number(stat_influence, int(s.get("influence", 0)))
+	_tween_stat_number(stat_resources, int(s.get("resources", 0)))
+	_tween_stat_number(stat_crisis, int(s.get("crisis", 0)))
+	_tween_stat_number(stat_control, int(s.get("control_regions", 0)), target)
 
 	# Tint crisis value red when it's climbing to warn the player.
 	var crisis: int = int(s.get("crisis", 0))
@@ -166,6 +166,55 @@ func _render_state() -> void:
 
 	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
 	_refresh_region_map()
+
+
+# Tween helper: counts from the label's current numeric value up/down to the
+# new value over 0.35 s with cubic-out easing. Uses an int interpolation so the
+# label never shows fractional values. Supports "N / M" format via max_value.
+func _tween_stat_number(label: Label, target_value: int, max_value: int = -1) -> void:
+	if label == null:
+		return
+	var existing: Tween = label.get_meta("count_tw", null)
+	if existing is Tween and existing.is_valid():
+		existing.kill()
+	var current_text: String = label.text
+	var current_value: int = _parse_leading_int(current_text)
+	# Nothing to animate.
+	if current_value == target_value:
+		_write_stat_text(label, target_value, max_value)
+		return
+	var duration: float = 0.35 if absi(target_value - current_value) >= 3 else 0.18
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# method_bind lambda that writes the lerped integer into the label each tick.
+	tw.tween_method(
+		func(v: float) -> void:
+			_write_stat_text(label, int(round(v)), max_value),
+		float(current_value), float(target_value), duration
+	)
+	label.set_meta("count_tw", tw)
+
+
+func _write_stat_text(label: Label, value: int, max_value: int) -> void:
+	if max_value >= 0:
+		label.text = "%d / %d" % [value, max_value]
+	else:
+		label.text = str(value)
+
+
+func _parse_leading_int(s: String) -> int:
+	var out: String = ""
+	for i in range(s.length()):
+		var ch: String = s[i]
+		if ch == "-" and out == "":
+			out += ch
+		elif ch >= "0" and ch <= "9":
+			out += ch
+		else:
+			break
+	if out == "" or out == "-":
+		return 0
+	return int(out)
 
 
 func _refresh_region_map() -> void:

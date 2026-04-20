@@ -494,3 +494,18 @@ sin necesidad de hover.
 El tooltip se alineó al nuevo vocabulario (`Plague` en vez de
 `Infection`) para que la palabra que ve el jugador al hoverar coincida
 con la abreviatura que lee en el label.
+
+### 9.11 HUD stat count-up (`_tween_stat_number`)
+Antes las stats del HUD saltaban instantáneamente (`47 → 52`). Ahora cada
+cambio tweenea el valor numérico durante 0.35 s (cubic-out, 0.18 s si el
+delta es <3) usando `tween_method` sobre un int redondeado, de modo que
+el jugador *ve* el contador subir/bajar y no solo ve un valor diferente:
+
+- El helper parsea el leading int del texto actual (`"45"`, `"-3"`,
+  `"3 / 7"`) para saber desde dónde empezar, y acepta un `max_value`
+  opcional para stats compuestas como `control 2 / 7`.
+- Cada label guarda su tween activo en `meta("count_tw")` para que un
+  nuevo render interrumpa el anterior sin superponer animaciones.
+- El stat floater (9.1) sigue siendo el feedback "grueso" por decisión; el
+  count-up es la continuidad "fina" del HUD. Juntos crean la sensación de
+  un tablero que responde, no un text-box que se reescribe.
