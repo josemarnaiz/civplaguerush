@@ -142,6 +142,66 @@ func _start_turn() -> void:
 
 	_render_state()
 	_render_current_event()
+	# Show the turn ribbon after the state is rendered so the new turn number
+	# is already on the HUD when the ribbon reads it. Skip on the very first
+	# render (turn 0) because the player just clicked Start Run.
+	if world_simulation.turn_index > 0:
+		_show_turn_ribbon()
+
+
+# Slides a gold ribbon across the top of the screen that reads "Turn N / M",
+# fading out after a beat. Purely decorative — does not block input.
+func _show_turn_ribbon() -> void:
+	var layer: CanvasLayer = _floater_layer
+	if layer == null:
+		layer = CanvasLayer.new()
+		layer.layer = 50
+		add_child(layer)
+		_floater_layer = layer
+
+	var ribbon := PanelContainer.new()
+	ribbon.name = "TurnRibbon"
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.059, 0.039, 0.055, 0.92)
+	bg.border_color = Color(0.910, 0.753, 0.407, 1.0)  # O4 gold
+	bg.set_border_width_all(0)
+	bg.border_width_top = 2
+	bg.border_width_bottom = 2
+	bg.content_margin_left = 48
+	bg.content_margin_right = 48
+	bg.content_margin_top = 10
+	bg.content_margin_bottom = 10
+	ribbon.add_theme_stylebox_override("panel", bg)
+
+	var lbl := Label.new()
+	lbl.text = "TURN  %d  /  %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
+	lbl.add_theme_font_size_override("font_size", 28)
+	lbl.add_theme_color_override("font_color", Color(0.910, 0.753, 0.407, 1.0))
+	lbl.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	lbl.add_theme_constant_override("outline_size", 6)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ribbon.add_child(lbl)
+
+	layer.add_child(ribbon)
+	# Fit the container to the label.
+	ribbon.force_update_transform()
+	# Position from screen: entry from the left edge, target at horizontal centre
+	# one-fifth down from the top; exit off the right edge.
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	await get_tree().process_frame
+	var ribbon_size: Vector2 = ribbon.size
+	var target_y: float = viewport_size.y * 0.18
+	ribbon.position = Vector2(-ribbon_size.x, target_y)
+	var centre_x: float = (viewport_size.x - ribbon_size.x) * 0.5
+	var exit_x: float = viewport_size.x + 20.0
+
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ribbon, "position:x", centre_x, 0.35)
+	tw.tween_interval(1.05)
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_property(ribbon, "position:x", exit_x, 0.35)
+	tw.tween_callback(ribbon.queue_free)
 
 
 func _render_state() -> void:

@@ -524,3 +524,20 @@ fila entera del HUD "Crisis" empieza a respirar entre modulate
 
 Es compatible con `_tween_stat_number` (9.11) porque uno modifica `text`
 y el otro `modulate` de padre: no pelean por la misma propiedad.
+
+### 9.13 Turn ribbon (`_show_turn_ribbon`)
+Al comenzar cada turno (excepto el primero, que se abre con la transición
+MainMenu → RunScene), una banderola dorada O4 se desliza desde el borde
+izquierdo de la pantalla, queda centrada 1.05 s con el texto
+`TURN  N  /  M` en 28 pt, y sale por el borde derecho en 0.35 s más.
+
+- El contenedor es un `PanelContainer` con `StyleBoxFlat` D0 α=0.92 y
+  borde superior/inferior O4 2 px — cero color fuera de paleta.
+- Padding 48 px horizontal, 10 px vertical → la banda se siente
+  cinematográfica sin cubrir la mitad del HUD.
+- El label usa outline D0 6 px para que el texto no desaparezca sobre el
+  arte del mapa o el `menu_backdrop` si el ribbon se solapa.
+- Se instancia bajo el mismo `CanvasLayer` (`layer=50`) que los stat
+  floaters (9.1), así nunca compite con overlays inferiores.
+- La tween es secuencial: entrada → hold → salida → `queue_free`, así que
+  nunca quedan ribbons huérfanos aunque el jugador spamée turnos.
