@@ -814,6 +814,18 @@ func _draw() -> void:
 			var name_pos: Vector2 = Vector2(c.x - ns.x / 2.0, c.y + 12.0)
 			var stats_x: float = c.x - total_w / 2.0
 			var stats_y: float = c.y + 24.0
+			# Dark backplate so labels stay readable over mountains / forests.
+			# Two stacked rounded-rect-ish fills (just draw_rect with slight
+			# transparency; GDScript canvas has no rounded rect primitive).
+			var pad: float = 3.0
+			var name_bg := Rect2(
+				Vector2(name_pos.x - pad, name_pos.y - 1.0),
+				Vector2(ns.x + pad * 2.0, float(name_size) + 2.0))
+			var stats_bg := Rect2(
+				Vector2(stats_x - pad, stats_y - 1.0),
+				Vector2(total_w + pad * 2.0, float(stats_size) + 2.0))
+			draw_rect(name_bg, Color(0.059, 0.039, 0.055, 0.55), true)
+			draw_rect(stats_bg, Color(0.059, 0.039, 0.055, 0.55), true)
 			# Drop shadow pass for readability on busy fills.
 			draw_string(font, name_pos + Vector2(1, 1), short_name,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(0, 0, 0, 0.75))
@@ -897,6 +909,11 @@ func _draw() -> void:
 		draw_string(legend_font, Vector2(lx, legend_y), "PLG", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, rose)
 		lx += legend_font.get_string_size("PLG", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 4.0
 		draw_string(legend_font, Vector2(lx, legend_y), "plague", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, dim)
+
+	# Pass 6c: parchment vignette. Subtle dark gradient in the four corners so
+	# the map reads like a painted cartographic plate rather than a flat
+	# rectangle. Kept low-alpha so it never obscures gameplay content.
+	_draw_parchment_vignette(s)
 
 	# Pass 7: turn-advance flash overlay (fades out over ~0.6s). The flash is
 	# a horizontal gradient bloom so it reads as a "dawn breaking" moment
@@ -1220,6 +1237,31 @@ func _draw_ice_flecks(s: Vector2, poly: PackedVector2Array, rid: String,
 		draw_line(p + Vector2(0, -2.2), p + Vector2(0, 2.2), fleck, 1.0)
 		draw_line(p + Vector2(-1.4, -1.4), p + Vector2(1.4, 1.4), fleck, 0.8)
 		draw_line(p + Vector2(-1.4, 1.4), p + Vector2(1.4, -1.4), fleck, 0.8)
+
+
+func _draw_parchment_vignette(s: Vector2) -> void:
+	# Four triangular gradients in the corners produce a soft cartouche feel.
+	# Vertex colors let the darkness peak at the corner and fade to 0 at the
+	# inner point of each triangle, avoiding a harsh rectangle edge.
+	var peak: Color = Color(0.059, 0.039, 0.055, 0.55)  # D0 with alpha
+	var fade: Color = Color(0.059, 0.039, 0.055, 0.0)
+	var reach: Vector2 = s * 0.28
+	# Top-left
+	_draw_corner_vignette(Vector2(0, 0), Vector2(reach.x, 0), Vector2(0, reach.y), peak, fade)
+	# Top-right
+	_draw_corner_vignette(Vector2(s.x, 0), Vector2(s.x - reach.x, 0), Vector2(s.x, reach.y), peak, fade)
+	# Bottom-left
+	_draw_corner_vignette(Vector2(0, s.y), Vector2(reach.x, s.y), Vector2(0, s.y - reach.y), peak, fade)
+	# Bottom-right
+	_draw_corner_vignette(Vector2(s.x, s.y), Vector2(s.x - reach.x, s.y),
+		Vector2(s.x, s.y - reach.y), peak, fade)
+
+
+func _draw_corner_vignette(corner: Vector2, along_x: Vector2, along_y: Vector2,
+		corner_col: Color, edge_col: Color) -> void:
+	var verts := PackedVector2Array([corner, along_x, along_y])
+	var cols := PackedColorArray([corner_col, edge_col, edge_col])
+	draw_polygon(verts, cols)
 
 
 func _draw_river(s: Vector2, path: Array, core_width: float, with_delta: bool) -> void:

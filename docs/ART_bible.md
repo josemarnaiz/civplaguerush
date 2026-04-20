@@ -206,42 +206,74 @@ Antes de dar un asset por "done":
 
 ## 7. Mapamundi continental (`scripts/ui/region_map.gd`)
 
-El mapa se ha reescrito para leerse como un mapamundi tipo Risk/Imperialism,
-no como un enjambre de blobs aislados.
+El mapa se repintó de cero para leerse como un **mapamundi pintado tipo
+Tierra Media**: una única masa continental irregular con cordilleras nevadas,
+ríos, archipiélago costero y viñeta de pergamino, no el grid 4×3 original.
 
 ### 7.1 Topología
-Tres bandas latitudinales con seas entre ellas. Las 12 regiones se distribuyen
-siguiendo el `CONTINENT_LAYOUT`:
+Una sola masa continental + un archipiélago offshore (r10) al suroeste.
+Las 12 regiones son celdas de un **Voronoi** sobre 11 seeds pintados a mano
+(la duodécima es el archipiélago) dentro de un outline continental también
+cincelado a mano. Claves en constantes al principio del script:
 
-```
-Row 0 (Norte):       [r01, r02, r03, r04]  -> un solo continente Eurasia-like
-Row 1 (Ecuador):     [r05, r06] | [r07, r08]  -> dos continentes con golfo atlántico
-Row 2 (Sur):         [r09] | [r10] | [r11, r12]  -> isla, archipiélago, continente
-```
+- `CONTINENT_OUTLINE`: 32 anchor points en sentido horario que definen la
+  silueta. En runtime se suaviza con Catmull-Rom y se ondula con tres
+  sinusoidales superpuestas (7/17/33 ciclos) a lo largo de la normal
+  tangente → 144 samples de costa pintada.
+- `REGION_SEEDS`: un `Vector2` por región en coords 0..1. Se eligieron a ojo
+  respetando los biomas (tundra al norte, volcán al SE, arcology al centro-
+  sur, costa al oeste, etc.) y dejando hueco para el archipiélago.
+- `OFFSHORE_IDS`: ids que **no** participan en el Voronoi y se construyen
+  aparte como islas (`_build_offshore_archipelago`).
 
-- Las regiones de un mismo grupo **comparten costa interior**: el polígono de
-  `r02` empieza exactamente donde acaba el de `r01`, sin hueco oceánico.
-- Los bordes internos (p.ej. r01|r02) se dibujan como **línea dorada
-  punteada** (`INTERNAL_BORDER`, O3 alpha 0.70), para que se lean como
-  frontera política y no como costa.
-- Los bordes exteriores de cada continente se dibujan como polyline oscura
-  gruesa (`COAST_COLOR` 1.6 px) con halo cream (`COAST_GLOW` 3.2 px) debajo,
-  imitando pintura a mano sobre pergamino.
+### 7.2 Carving Voronoi
+Para cada seed en tierra se lanzan `VORONOI_RAYS=80` rayos desde el centro.
+La distancia de cada rayo es el mínimo de:
+1. **Bisector** contra todas las demás seeds: si `denom = (q-p)·dir > 0`,
+   `t = 0.5·|q-p|² / denom`. Clipea el rayo al hiperplano de Voronoi.
+2. **Outline**: primer cruce del rayo con la costa (rejilla lineal contra
+   los 144 segmentos usando `Geometry2D.segment_intersects_segment`).
+3. Un pequeño **inset** (0.0025) para que polígonos adyacentes no se pisen.
 
-### 7.2 Geometría de costa
-Para cada continente se muestrean 12 puntos por columna a lo largo del top y
-bottom. La ordenada aplica tres sinusoidales superpuestas:
-- **Continental** (0.75 ciclos por grupo, amp 0.018-0.055): curvatura grande.
-- **Media** (2.0-2.2 ciclos, amp 0.014): bahías y cabos.
-- **Fina** (4.1-4.7 ciclos, amp 0.006): detalle costero.
+El radio final se multiplica por un factor de ondulación con tres frecuencias
+(3/7/13 ciclos angulares, fase por-región derivada del hash del id) → los
+bordes internos no son segmentos rectos sino curvas pintadas.
 
-Además se aplica un **eje continental** (sin amp 0.010-0.040, phase por-continente)
-que desplaza **TODO** el continente arriba/abajo a lo largo de su largo → el
-resultado es un continente que serpentea, no una barra horizontal.
+Los bordes políticos dorados (`_continent_internal_borders`) se calculan
+caminando la **bisectriz** entre cada par de regiones adyacentes hasta que
+se cruza otro Voronoi o la costa (`_bisector_walk_limit`). Eso garantiza que
+el borde dorado siempre esté dentro del tejido continental.
 
-Los extremos se tapera (smoothstep 12%) para que las costas norte/sur se unan
-limpiamente con las costas laterales (oeste/este) que se generan como curvas
-verticales con indentación SIDE_COAST_INDENT = 0.014.
+### 7.3 Cordilleras y ríos pintados
+- `MOUNTAIN_RANGES`: 4 cordilleras authoradas (spine norte, Misty central,
+  Ash oriental, cresta Harad al sur). Cada una es un polyline que se samplea
+  cada ~11 px en píxeles reales; en cada punto se dibuja un pico con 3 tonos
+  (cuerpo cálido, sombra derecha, cap de nieve cream) + outline oscuro.
+  La altura/anchura de cada pico varía con un hash posicional.
+- `MAIN_RIVER` + `TRIBUTARY`: dos polylines Catmull-Rom smoothed + sine
+  wobble perpendicular. Render en dos pases (halo claro más grueso + core
+  slate). El río principal añade un pequeño **delta circular** en la salida
+  al mar. Se dibujan **bajo** las cordilleras para que las crestas parezcan
+  cortar el cauce, como en los mapas de Tolkien.
+
+### 7.4 Adornos por bioma (`_draw_biome_ornaments`)
+Cada región salpica micro-iconos dentro de su polígono (rechazo-muestreo
+semilla por id, excluyendo el centroide donde van el biome-icon y el label):
+- **veil / jungle**: pinos con wedge claro + tronco (más densos en jungle).
+- **drylands**: curvas de duna (polylines sinusoidales en O2).
+- **ruins**: columnas rotas (3 rectángulos apilados con grietas laterales).
+- **volcano**: brasas con halo naranja que pulsa con `_time` (2.3 Hz).
+- **tundra**: estrellas de hielo (cruz + diagonales cream).
+
+### 7.5 Costa, viñeta y legibilidad
+- Costa exterior: doble trazo (glow cream 3.2 px + dark 1.6 px).
+- Shelf halo (`_draw_shelf_halos`): expand 1.2% → plataforma continental.
+- **Label backplate**: cada etiqueta (nombre + INF/PLG) va sobre un
+  `draw_rect` translúcido `Color(D0, 0.55)` para leer encima de montañas,
+  bosques y ríos sin sacrificar legibilidad.
+- **Viñeta de pergamino** (`_draw_parchment_vignette`): 4 triángulos
+  gradiente D0 alpha 0.55 → 0 en las 4 esquinas, para que el mapa se lea
+  como plato cartográfico y no como rectángulo.
 
 ### 7.3 Océano animado (5 pases `_draw`)
 1. `_draw_ocean_gradient` — bandas horizontales D1→D0 arriba y cálida abajo.
@@ -272,8 +304,11 @@ misma doble-costa (halo + dark) y shadow offset que los continentes.
 - **Flash de pérdida de control** (existente): anillo R4 que fade over 1.2s.
 
 ### 7.6 Layout final
-- `Vector2(0, 190)` altura mínima del RegionMap en RunScene (ajustada para
-  que cabecera + HUD + evento con consejero + footer fit en 720p sin overflow).
+- `Vector2(0, 260)` altura mínima del `RegionMap` en `RunScene.tscn`. El
+  bump desde 190 → 260 es necesario para que el continente Voronoi tenga
+  un ratio ~3.8:1 (1000×260 cuando el HUD ocupa ancho completo), no un
+  trozo aplastado tipo stripe. Header + StatePanel + EventPanel + Actions
+  siguen cabiendo en 720p sin scroll.
 
 ---
 
