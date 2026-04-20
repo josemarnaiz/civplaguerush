@@ -397,3 +397,33 @@ ojos-speck O3, y piso de cenizas con grietas radiales. Sobre esto va un
 El backdrop se renderiza detrás del título vía `TextureRect` con
 `texture_filter = 1` (nearest) y `modulate` 0.78 para que las columnas
 respiren pero no compitan con el logo central.
+
+### 9.5 MetaHub — archivo y tarjetas de tecnología
+`scenes/MetaHub.tscn` reutiliza el `menu_backdrop` con `modulate` 0.55 y un
+`BackdropShade` D0 α=0.55 encima para que la lectura de texto denso
+prevalezca. Las techs se renderizan ahora como tarjetas horizontales con
+cuatro zonas:
+
+1. **Badge** (`*` verde si desbloqueada, `$` oro si asequible, `-` malva si no).
+2. **Info** — nombre a 18 pt + descripción autowrap a 13 pt modulate 0.82.
+3. **Pill de coste** — "NN cr" en O3/D3 según affordability.
+4. **Botón** — "UNLOCKED" (disabled) o "Unlock" (activo sólo si hay créditos).
+
+### 9.6 Tendrils de plaga animados (`region_map.gd::_draw_plague_tendrils`)
+Para cada región con infección ≥ 50%, el mapa pinta una corona de 4-7
+strands rojos curvos que emanan del centroide. Características:
+
+- **Intensidad escalar** con la infección desplegada (0 a 1 entre 50% y 100%).
+- **Seed por-región** `id.hash() & 0xFFFF` para que las regiones ondulen
+  desfasadas entre sí y no parezcan un efecto global.
+- Cada strand es una polyline de 6 segmentos siguiendo
+  `ang0 + sin(t*1.8 + i*0.7 + s*4.5) * 0.45`, con pull-back del 60% en el
+  último 20% del recorrido → se curvan como serpientes.
+- Doble stroke (R4 outer 2.2 px α 0.25-0.70, R3 core 1.0 px α 0.40-0.95)
+  para profundidad sin costar draw calls extra.
+- **Pústula central** pulsando a 3.1 Hz con highlight R4 interior, sirve
+  de "ombligo" de la infección incluso cuando la región está fría.
+
+Se dibuja como Pass 2d (después de coastlines y rings, antes de iconos de
+bioma y labels) para que los strands atraviesen el borde de la región pero
+queden bajo el texto y los biome icons.

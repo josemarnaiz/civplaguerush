@@ -985,13 +985,13 @@ func _draw_plague_tendrils(s: Vector2) -> void:
 		var c: Vector2 = _centroids[id] * s
 		# Per-region deterministic offset so tendrils on different regions
 		# wiggle out of phase with one another.
-		var seed: float = float(id.hash() & 0xFFFF) / 65535.0 * TAU
+		var region_seed: float = float(id.hash() & 0xFFFF) / 65535.0 * TAU
 		var n_strands: int = 4 + int(round(intensity * 3.0))
 		var base_len: float = 14.0 + intensity * 18.0
 		var core_alpha: float = 0.40 + 0.55 * intensity
 
 		for i in range(n_strands):
-			var ang0: float = TAU * float(i) / float(n_strands) + seed + _time * 0.35
+			var ang0: float = TAU * float(i) / float(n_strands) + region_seed + _time * 0.35
 			# Tendril: 6 segment polyline following a wiggling arc.
 			var pts := PackedVector2Array()
 			var segs: int = 6
@@ -1015,7 +1015,7 @@ func _draw_plague_tendrils(s: Vector2) -> void:
 			draw_polyline(pts, inner, 1.0, true)
 
 		# Central pustule: 2-ring dot pulsing with crisis.
-		var pulse: float = 0.5 + 0.5 * sin(_time * 3.1 + seed)
+		var pulse: float = 0.5 + 0.5 * sin(_time * 3.1 + region_seed)
 		var pust_r: float = 2.4 + intensity * 2.6 + pulse * 0.7
 		var pust_col: Color = PLAGUE_TENDRIL_CORE
 		pust_col.a = 0.35 + 0.45 * intensity
