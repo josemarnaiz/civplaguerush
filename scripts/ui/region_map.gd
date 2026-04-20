@@ -98,6 +98,7 @@ var _continent_internal_borders: Array = []
 # Decorative non-interactive islets scattered in the seas between continents.
 # Each entry is a PackedVector2Array in normalized 0..1 coordinates.
 var _ocean_islets: Array = []
+var _turn_flash_until: float = -1.0   # while _time < this, a gold flash fades over the map
 var _selectable_ids: Dictionary = {}
 var _selection_active: bool = false
 var _active_target_id: String = ""
@@ -163,6 +164,13 @@ func refresh(snapshot: Array) -> void:
 		build_from_snapshot(snapshot)
 		return
 	_snapshot = snapshot.duplicate(true)
+	queue_redraw()
+
+
+# Triggers a decorative gold flash over the map that fades out over 0.6s.
+# Call this when the turn rolls over so the player gets a clear visual beat.
+func trigger_turn_flash(duration: float = 0.6) -> void:
+	_turn_flash_until = _time + max(0.1, duration)
 	queue_redraw()
 
 
@@ -723,7 +731,29 @@ func _draw() -> void:
 		var rose_rect := Rect2(rose_pos, Vector2(COMPASS_SIZE, COMPASS_SIZE))
 		draw_texture_rect(_compass_rose, rose_rect, false, Color(1, 1, 1, 0.82))
 
-	# Pass 7: tooltip for the hovered region (after a short delay).
+	# Pass 7: turn-advance flash overlay (fades out over ~0.6s). The flash is
+	# a horizontal gradient bloom so it reads as a "dawn breaking" moment
+	# rather than a harsh full-screen overlay.
+	if _turn_flash_until > 0.0 and _time <= _turn_flash_until:
+		var flash_dur: float = 0.6
+		var remain: float = clampf((_turn_flash_until - _time) / flash_dur, 0.0, 1.0)
+		var a: float = remain * remain * 0.55
+		# Two bands: warm gold from bottom, cool cream sheen across middle.
+		var gold: Color = Color(0.969, 0.745, 0.341, a)                  # O4 highlight
+		for i in range(8):
+			var t: float = float(i) / 8.0
+			var band: Color = gold
+			band.a = a * (1.0 - t) * 0.9
+			draw_rect(Rect2(Vector2(0, s.y - (i + 1) * s.y / 8.0),
+				Vector2(s.x, s.y / 8.0 + 1.0)), band)
+		# A bright horizontal sweep around vertical mid.
+		var sheen_y: float = s.y * (0.45 - (1.0 - remain) * 0.15)
+		var sheen: Color = Color(0.969, 0.902, 0.659, a * 0.75)          # O5 sheen
+		draw_rect(Rect2(Vector2(0, sheen_y - 6.0), Vector2(s.x, 12.0)), sheen)
+	elif _turn_flash_until > 0.0 and _time > _turn_flash_until:
+		_turn_flash_until = -1.0
+
+	# Pass 8: tooltip for the hovered region (after a short delay).
 	_draw_hover_tooltip(s)
 
 
