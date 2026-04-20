@@ -146,7 +146,8 @@ func _start_turn() -> void:
 func _render_state() -> void:
 	turn_label.text = "Turn %d / %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
 	var s: Dictionary = world_simulation.world_state
-	var target: int = int(config.get("win_conditions", {}).get("target_control_regions", 7))
+	var target: int = int(config.get("win_conditions", {}).get(
+		"target_control_regions", WorldSimulationClass.DEFAULT_TARGET_CONTROL_REGIONS))
 
 	stat_stability.text = str(int(s.get("stability", 0)))
 	stat_influence.text = str(int(s.get("influence", 0)))
@@ -206,12 +207,21 @@ func _render_current_event() -> void:
 
 	_update_active_target(event_data)
 
+	# Build a bright "select a region on the map" hint as the first child of the
+	# Choices VBox while we wait for a region pick (see BUG-005). Rebuilding on
+	# every render keeps it in sync with _awaiting_region_pick transitions.
+	_rebuild_pick_mode_hint(pending_pick)
+
 	for choice in event_data.get("choices", []):
 		var button := Button.new()
 		button.text = _display_text(String(choice.get("label", "Choose")), pending_pick, display_placeholder)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.custom_minimum_size = Vector2(min_size.x, min_size.y)
 		button.disabled = _awaiting_region_pick
+		# Tell the VBox to honour our min size and keep each row independent,
+		# so no stray measurement collapses rows onto each other (see BUG-001).
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.clip_text = false
 		button.pressed.connect(_on_choice_selected.bind(choice))
 		# Attach a tag chip on the left of the text so players can read the
 		# "flavour" of each option at a glance (force/diplomacy/science/etc.).
@@ -220,8 +230,40 @@ func _render_current_event() -> void:
 		_wire_choice_hover(button)
 		choices_container.add_child(button)
 
+	# Force the VBoxContainer to re-sort on this same frame. Without this, a
+	# late `modulate` assignment could theoretically land before the container
+	# positions each child, which would stack all buttons at y=0 (BUG-001).
+	choices_container.queue_sort()
+
 	_render_state()
 	_animate_event_reveal()
+
+
+# Injects / removes a bright "Select a region on the map above." hint at the
+# top of the Choices VBox while the current event is a player_chooses one and
+# the player has not yet picked a region. Having the hint inside the VBox
+# makes it stack cleanly above the disabled option buttons (see BUG-005).
+func _rebuild_pick_mode_hint(pending_pick: bool) -> void:
+	if choices_container == null:
+		return
+	for child in choices_container.get_children():
+		if child is Label and child.name == "PickModeHint":
+			child.queue_free()
+	if not pending_pick:
+		return
+	var hint := Label.new()
+	hint.name = "PickModeHint"
+	hint.text = "↑ Select a region on the map above"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 16)
+	# O4 gold from Ashen Fresco palette so it reads as a waiting prompt rather
+	# than an error state (red).
+	hint.add_theme_color_override("font_color", Color(0.910, 0.753, 0.408, 1.0))
+	hint.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	hint.add_theme_constant_override("outline_size", 4)
+	choices_container.add_child(hint)
+	# Keep the hint above the option buttons.
+	choices_container.move_child(hint, 0)
 
 
 # --- Regional pick mode ----------------------------------------------------
@@ -237,6 +279,39 @@ func _begin_region_pick_mode(event_data: Dictionary) -> void:
 		String(event_data.get("description", "")),
 		prompt
 	]
+	# Insert a bold gold hint banner at the top of the choices stack so the
+	# player never reads the disabled buttons as "UI is broken". Removed by
+	# _end_region_pick_mode (via the blanket choices_container clear on next
+	# render) or the node is free'd when we leave the mode.
+	var hint := Label.new()
+	hint.name = "RegionPickHint"
+	hint.text = "[!] " + prompt
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.add_theme_font_size_override("font_size", 18)
+	hint.add_theme_color_override("font_color", Color(0.910, 0.753, 0.407, 1.0))  # O4 gold
+	hint.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	hint.add_theme_constant_override("outline_size", 4)
+	hint.modulate.a = 0.0
+	choices_container.add_child(hint)
+	choices_container.move_child(hint, 0)
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(hint, "modulate:a", 1.0, 0.28)
+	# Pulse the hint alpha between 1.0 and 0.72 forever (3 Hz breath) so it
+	# reads as "active input surface elsewhere on screen".
+	_start_hint_breath(hint)
+
+
+func _start_hint_breath(hint: Label) -> void:
+	if not is_instance_valid(hint):
+		return
+	var bw := create_tween()
+	bw.set_loops()
+	bw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	bw.tween_property(hint, "modulate:a", 0.72, 0.6)
+	bw.tween_property(hint, "modulate:a", 1.00, 0.6)
+	hint.set_meta("breath_tw", bw)
 
 
 func _end_region_pick_mode() -> void:
@@ -529,8 +604,30 @@ func _finalize_turn() -> void:
 	_refresh_region_map()
 	if region_map and region_map.has_method("trigger_turn_flash"):
 		region_map.trigger_turn_flash(0.65)
+
+	# Refresh the HUD with the post-passive, post-advance state BEFORE we
+	# evaluate outcome so the numbers the player reads on-screen match the
+	# numbers the simulation is judging the run against (see BUG-006).
+	_render_state()
+
 	var evaluation: Dictionary = world_simulation.evaluate_outcome()
-	if String(evaluation.get("outcome", "ongoing")) == "ongoing":
+	var outcome: String = String(evaluation.get("outcome", "ongoing"))
+
+	# One-line trace so any spurious end-of-run (see BUG-002) leaves forensic
+	# evidence in the logs. Cheap, emitted exactly once per turn transition.
+	var ev_state: Dictionary = evaluation.get("state", {})
+	print("[RunScene] turn=%d/%d outcome=%s stab=%d inf=%d res=%d crisis=%d control=%d" % [
+		world_simulation.turn_index,
+		world_simulation.turns_total,
+		outcome,
+		int(ev_state.get("stability", 0)),
+		int(ev_state.get("influence", 0)),
+		int(ev_state.get("resources", 0)),
+		int(ev_state.get("crisis", 0)),
+		int(ev_state.get("control_regions", 0)),
+	])
+
+	if outcome == "ongoing":
 		_start_turn()
 		return
 

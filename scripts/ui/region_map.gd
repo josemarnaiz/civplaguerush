@@ -573,8 +573,13 @@ func _draw() -> void:
 		var ring_w: float = 0.0
 
 		if _selection_active and _selectable_ids.has(id):
+			# Pulse the selectable ring so it reads as "click me" even through
+			# busy map content. Amplitude stays tight so non-selectable regions
+			# don't get visually drowned.
+			var pulse: float = 0.5 + 0.5 * sin(_time * 4.2)
 			ring_color = RING_SELECTABLE
-			ring_w = 2.6
+			ring_color.a = 0.65 + 0.35 * pulse
+			ring_w = 2.6 + pulse * 1.2
 		elif influence >= CONTROL_THRESHOLD:
 			ring_color = RING_CONTROLLED
 			ring_w = 2.0

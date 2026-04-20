@@ -3,6 +3,17 @@ extends RefCounted
 
 const RegionGridClass = preload("res://scripts/systems/region_grid.gd")
 
+# Balance defaults. These mirror the values shipped in data/run_config.json and
+# act as the single source of truth when a config omits a key. Keeping them
+# here (instead of duplicating fallbacks at every call site) guarantees the HUD,
+# the simulation and the overlay can never silently disagree on what counts as
+# a win — see BUG-004.
+const DEFAULT_TURNS_PER_RUN: int = 24
+const DEFAULT_TARGET_CONTROL_REGIONS: int = 7
+const DEFAULT_MAX_CRISIS_FOR_WIN: int = 50
+const DEFAULT_STABILITY_BELOW_LOSS: int = 10
+const DEFAULT_CRISIS_ABOVE_LOSS: int = 90
+
 var config: Dictionary = {}
 var region_defs: Dictionary = {}
 var region_grid: RefCounted
@@ -18,7 +29,7 @@ func initialize(base_config: Dictionary, meta_modifiers: Dictionary = {}, region
 	config = base_config
 	region_defs = region_definitions
 	turn_index = 0
-	turns_total = int(config.get("turns_per_run", 24))
+	turns_total = int(config.get("turns_per_run", DEFAULT_TURNS_PER_RUN))
 
 	region_grid = RegionGridClass.new()
 	region_grid.initialize(region_defs)
@@ -137,11 +148,25 @@ func evaluate_outcome() -> Dictionary:
 	var win_cfg: Dictionary = config.get("win_conditions", {})
 	var lose_cfg: Dictionary = config.get("lose_conditions", {})
 
-	var is_loss: bool = int(world_state["stability"]) <= int(lose_cfg.get("stability_below", 10))
-	is_loss = is_loss or int(world_state["crisis"]) >= int(lose_cfg.get("crisis_above", 90))
+	var stability_below: int = int(lose_cfg.get("stability_below", DEFAULT_STABILITY_BELOW_LOSS))
+	var crisis_above: int = int(lose_cfg.get("crisis_above", DEFAULT_CRISIS_ABOVE_LOSS))
+	var target_control: int = int(win_cfg.get("target_control_regions", DEFAULT_TARGET_CONTROL_REGIONS))
+	var max_crisis_for_win: int = int(win_cfg.get("max_crisis_for_win", DEFAULT_MAX_CRISIS_FOR_WIN))
 
-	var is_win: bool = int(world_state["control_regions"]) >= int(win_cfg.get("target_control_regions", 8))
-	is_win = is_win and int(world_state["crisis"]) <= int(win_cfg.get("max_crisis_for_win", 60))
+	var is_loss: bool = int(world_state["stability"]) <= stability_below
+	is_loss = is_loss or int(world_state["crisis"]) >= crisis_above
+
+	var is_win: bool = int(world_state["control_regions"]) >= target_control
+	is_win = is_win and int(world_state["crisis"]) <= max_crisis_for_win
+
+	# Hard guard: the derived world_state["control_regions"] must agree with a
+	# fresh count from the grid. If this trips in production we know a code path
+	# mutated world_state without going through _recompute_derived (see BUG-002).
+	if is_win:
+		var fresh_controlled: int = region_grid.controlled_count()
+		if fresh_controlled < target_control:
+			push_error("WorldSimulation.evaluate_outcome: is_win=true but fresh controlled_count=%d < target=%d (world_state says %d). State desync — aborting false victory." % [fresh_controlled, target_control, int(world_state["control_regions"])])
+			is_win = false
 
 	var outcome: String = "ongoing"
 	if is_loss:

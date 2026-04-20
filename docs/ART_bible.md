@@ -456,3 +456,23 @@ El `TitleRow/Title` TextureRect respira con un sine de 1.4 rad/s:
 Combinado con el mural `menu_backdrop`, el resultado es que incluso en
 idle la pantalla inicial se siente como un fresco vivo donde la luz oscila
 lentamente sobre el Canciller.
+
+### 9.9 Region-pick mode (selector de región activo)
+Durante `player_chooses`, la UI tenía un problema de lectura: los botones
+quedaban deshabilitados (gris) y el único pista era un `>` al final de la
+descripción (ver QA BUG-005). La nueva capa añade tres señales
+redundantes para que el jugador no dude:
+
+1. **Hint banner** en gold O4 al principio del `Choices` VBox
+   (`[!] Pick a region on the map.`) con outline D0 4 px, breath loop 0.72
+   ↔ 1.0 a ~0.8 Hz, fade-in 0.28 s cubic-out.
+2. **Ring pulsante** en las regiones elegibles: `RING_SELECTABLE` ahora
+   modula alfa entre 0.65 y 1.0 y grosor 2.6 → 3.8 con sine `4.2 rad/s`,
+   destacando sobre el ruido del mapa sin sobre-animar el resto.
+3. Los botones deshabilitados permanecen visibles debajo, mostrando las
+   opciones sintácticamente pero claramente secundarias.
+
+El banner vive el ciclo de vida del pick: se añade en
+`_begin_region_pick_mode`, se libera automáticamente por el `queue_free`
+de children en el próximo `_render_current_event`, y el tween de breath se
+almacena como meta por si hubiera que cortarlo antes.
