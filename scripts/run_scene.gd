@@ -63,6 +63,8 @@ const ADVISOR_PATH_BY_ID: Dictionary = {
 const ADVISOR_FALLBACK_PATH: String = "res://assets/art/advisors/advisor_chancellor.png"
 @onready var progress_label: Label = $Margin/VBox/Footer/ProgressLabel
 @onready var back_button: Button = $Margin/VBox/Footer/BackButton
+@onready var run_end_overlay: Control = $RunEndOverlay
+var _floater_layer: CanvasLayer = null
 
 var world_simulation: WorldSimulation
 var event_director: EventDirector
@@ -211,6 +213,10 @@ func _render_current_event() -> void:
 		button.custom_minimum_size = Vector2(min_size.x, min_size.y)
 		button.disabled = _awaiting_region_pick
 		button.pressed.connect(_on_choice_selected.bind(choice))
+		# Attach a tag chip on the left of the text so players can read the
+		# "flavour" of each option at a glance (force/diplomacy/science/etc.).
+		var tag: String = String(choice.get("tag", "")) if choice.has("tag") else _infer_choice_tag(choice)
+		_apply_choice_chip(button, tag)
 		choices_container.add_child(button)
 
 	_render_state()
@@ -275,19 +281,18 @@ func _animate_event_reveal() -> void:
 		pt.tween_property(advisor_portrait, "scale", Vector2.ONE, 0.42)
 
 	# Stagger the choice buttons (they were just rebuilt in _render_current_event).
+	# Only tween modulate — touching `position.y` fights the VBoxContainer layout
+	# and collapses every button to y=0 once the tween lands.
 	if choices_container:
 		var i: int = 0
 		for child in choices_container.get_children():
 			if child is Control:
 				var btn: Control = child
 				btn.modulate = Color(1, 1, 1, 0.0)
-				btn.position.y = 8.0
 				var delay: float = 0.10 + 0.08 * float(i)
 				var ct: Tween = create_tween()
-				ct.set_parallel(true)
 				ct.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-				ct.tween_property(btn, "modulate:a", 1.0, 0.25).set_delay(delay)
-				ct.tween_property(btn, "position:y", 0.0, 0.30).set_delay(delay)
+				ct.tween_property(btn, "modulate:a", 1.0, 0.28).set_delay(delay)
 				i += 1
 
 
@@ -316,6 +321,10 @@ func _on_choice_selected(choice: Dictionary) -> void:
 	var event_data: Dictionary = current_turn_events[current_event_index]
 	var target_id: String = String(event_data.get("_target_region_id", ""))
 
+	# Snapshot world_state before applying effects so we can diff it afterwards
+	# and surface floating +/- numbers over the corresponding HUD stat.
+	var pre_state: Dictionary = world_simulation.world_state.duplicate(true)
+
 	var global_effects: Dictionary = choice.get("effects", {})
 	if not global_effects.is_empty():
 		world_simulation.apply_effects(global_effects)
@@ -329,8 +338,132 @@ func _on_choice_selected(choice: Dictionary) -> void:
 		world_simulation.apply_effects_adjacent(target_id, adjacent_effects)
 
 	_emit_control_loss_feedback()
+	_emit_stat_floaters(pre_state, world_simulation.world_state)
 	current_event_index += 1
 	_render_current_event()
+
+
+# --- Choice tag chips -----------------------------------------------------
+# Small 24x24 emblem + left-inset padding so every choice carries a readable
+# archetype badge: force, diplomacy, science, sacrifice, economy. When an
+# event data file doesn't ship an explicit `tag`, we heuristically infer one
+# from the effects payload so legacy events light up for free.
+
+const CHOICE_CHIP_PATH_BY_TAG: Dictionary = {
+	"force": "res://assets/art/icons/tag_force.png",
+	"diplomacy": "res://assets/art/icons/tag_diplomacy.png",
+	"science": "res://assets/art/icons/tag_science.png",
+	"sacrifice": "res://assets/art/icons/tag_sacrifice.png",
+	"economy": "res://assets/art/icons/tag_economy.png",
+}
+
+
+func _infer_choice_tag(choice: Dictionary) -> String:
+	var effects: Dictionary = choice.get("effects", {})
+	var crisis_d: int = int(effects.get("crisis", 0))
+	var stability_d: int = int(effects.get("stability", 0))
+	var influence_d: int = int(effects.get("influence", 0))
+	var resources_d: int = int(effects.get("resources", 0))
+	var control_d: int = int(effects.get("control_regions", 0))
+
+	# Force: aggressive — crisis rises hard OR takes control_regions aggressively.
+	if crisis_d >= 5 or control_d >= 1 and stability_d <= 0:
+		return "force"
+	# Sacrifice: explicit self-wound — stability/control crashes for payoff.
+	if stability_d <= -4 or control_d <= -1:
+		return "sacrifice"
+	# Science: heavy resource investment that cools crisis.
+	if resources_d <= -6 and crisis_d <= -3:
+		return "science"
+	# Diplomacy: stability or influence gain without a crisis bump.
+	if (stability_d >= 4 or influence_d >= 4) and crisis_d <= 0:
+		return "diplomacy"
+	# Economy: pure resource move (spend to calm, or harvest).
+	if abs(resources_d) >= 4:
+		return "economy"
+	# Default: diplomacy tends to be the soft-default council action.
+	return "diplomacy"
+
+
+func _apply_choice_chip(button: Button, tag: String) -> void:
+	if tag == "" or not CHOICE_CHIP_PATH_BY_TAG.has(tag):
+		return
+	var tex: Texture2D = _safe_load_texture(String(CHOICE_CHIP_PATH_BY_TAG[tag]))
+	if tex == null:
+		return
+	button.icon = tex
+	button.expand_icon = false
+	# Nudge the text right so the icon doesn't collide with the label.
+	button.add_theme_constant_override("icon_max_width", 24)
+	button.add_theme_constant_override("h_separation", 14)
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+# --- Stat delta floaters ---------------------------------------------------
+# Pops a short "+5" / "-3" label above each HUD stat whenever a decision
+# changes it. Colour-coded so crisis-up reads as bad and the rest read
+# naturally: positive green, negative red. Labels float up + fade in 0.85s.
+
+func _emit_stat_floaters(pre_state: Dictionary, post_state: Dictionary) -> void:
+	var anchors: Dictionary = {
+		"stability": stat_stability,
+		"influence": stat_influence,
+		"resources": stat_resources,
+		"crisis": stat_crisis,
+		"control_regions": stat_control,
+	}
+	for key in anchors.keys():
+		var pre: int = int(pre_state.get(key, 0))
+		var post: int = int(post_state.get(key, 0))
+		var delta: int = post - pre
+		if delta == 0:
+			continue
+		var anchor: Control = anchors[key]
+		if anchor == null or not anchor.is_inside_tree():
+			continue
+		var anchor_center: Vector2 = anchor.get_global_position() + anchor.size * 0.5
+		_spawn_stat_floater(anchor_center, String(key), delta)
+
+
+func _spawn_stat_floater(center: Vector2, key: String, delta: int) -> void:
+	var sign_str: String = "+" if delta > 0 else ""
+	var text: String = "%s%d" % [sign_str, delta]
+
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 20)
+	# Dark outline so it reads on both cream and dark panels.
+	lbl.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	lbl.add_theme_constant_override("outline_size", 4)
+
+	# Positive deltas are green, negative red. Crisis is inverted (going up is bad).
+	var is_good: bool = delta > 0
+	if key == "crisis":
+		is_good = delta < 0
+	var good_color := Color(0.659, 0.737, 0.349, 1.0)   # G3 — toxic green
+	var bad_color := Color(0.851, 0.329, 0.306, 1.0)    # R4 — wound red
+	lbl.add_theme_color_override("font_color", good_color if is_good else bad_color)
+
+	# Center the label on the anchor; Label pivots at its top-left so we offset.
+	lbl.position = center - Vector2(20.0, 30.0)
+	# Parent into a CanvasLayer so the floater always draws on top of the HUD,
+	# panels, and the run-end overlay backdrop.
+	if _floater_layer == null:
+		_floater_layer = CanvasLayer.new()
+		_floater_layer.layer = 50
+		add_child(_floater_layer)
+	_floater_layer.add_child(lbl)
+
+	var dur: float = 1.10
+	var fade_delay: float = 0.55
+	var fade_len: float = dur - fade_delay
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "position:y", lbl.position.y - 42.0, dur)
+	tw.tween_property(lbl, "modulate:a", 0.0, fade_len).set_delay(fade_delay)
+	# queue_free after the longest parallel tween finishes.
+	tw.chain().tween_callback(lbl.queue_free)
 
 
 func _on_region_clicked(region_id: String) -> void:
@@ -412,6 +545,20 @@ func _finish_run(evaluation: Dictionary) -> void:
 	})
 
 	SessionBridgeClass.save_run_result(run_result)
+
+	# Show the outcome overlay (Victory/Defeat/Timeout) before handing off to
+	# MetaHub. The overlay waits for user input or auto-advances after its
+	# internal hold, then signals `finished` so we can change scene.
+	var outcome: String = String(run_result.get("outcome", "ongoing"))
+	if run_end_overlay and run_end_overlay.has_method("show_outcome"):
+		if not run_end_overlay.finished.is_connected(_on_run_end_finished):
+			run_end_overlay.finished.connect(_on_run_end_finished, CONNECT_ONE_SHOT)
+		run_end_overlay.show_outcome(outcome)
+	else:
+		get_tree().change_scene_to_file("res://scenes/MetaHub.tscn")
+
+
+func _on_run_end_finished() -> void:
 	get_tree().change_scene_to_file("res://scenes/MetaHub.tscn")
 
 

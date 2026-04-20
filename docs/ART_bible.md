@@ -327,3 +327,103 @@ Cada vez que `_render_current_event()` construye un evento nuevo:
 El efecto conjunto es el de una carta girándose y revelando quién habla +
 qué opciones tienes, manteniendo el mood "barajando el destino" sin cruzar
 a animación caricaturesca.
+
+### 8.5 Nota de implementación: no tocar `position` en children de VBox
+El tween inicial usaba `position:y` para hacer un "slide up" de cada botón,
+pero un botón que vive dentro de un `VBoxContainer` pierde esa posición en
+cuanto el contenedor reordena (todos los botones colapsan a `y=0`). Desde
+que el chip es un `Button.icon`, incluso la fuerza del tween deja ver la
+colisión. Por eso la animación final **sólo** usa `modulate:a` — el layout
+lo decide el `VBoxContainer` y el chip/texto viajan limpios.
+
+---
+
+## 9. Floaters de stats, pantalla de fin de run, chips de choice y fondo de menú
+
+Cuatro capas de feedback visual que convierten cada decisión en un pequeño
+teatro cinematográfico.
+
+### 9.1 Stat floaters (`run_scene.gd::_emit_stat_floaters`)
+Cuando una elección modifica `world_state`, se dispara un floater por cada
+stat que cambia, anclado encima del icono HUD correspondiente:
+
+- **Verde G3** para positivos (salud/poder suben); **rojo R4** para negativos.
+- **Invertido** para `crisis`: subir crisis es rojo, bajarla es verde.
+- Outline D0 grueso (4 px) para que el número se lea sobre cualquier panel.
+- Anim 1.10 s: subida 42 px (cubic-out), fade tras 0.55 s.
+- Se parentan a un `CanvasLayer` con `layer=50` creado lazy, así nunca los
+  tapan overlays ni la run-end screen.
+
+### 9.2 Run-end overlay (`scripts/ui/run_end_overlay.gd` + `scenes/RunEndOverlay.tscn`)
+Pantalla dramática que se instancia como hijo del RunScene y permanece
+`visible = false` hasta que `_finish_run` llama `show_outcome(outcome)`:
+
+- **Victoria** → Canciller + título `VICTORY` (O4) + subtítulo narrativo.
+- **Derrota** → Plaguewright + título `DEFEAT` (R4) + rayos rojos girando.
+- **Timeout** → Arcanist + título `TIME OUT` (C4) en tono neutro.
+
+El overlay pinta en `_draw()` un abanico de rayos girando lentamente desde
+el centro (velocidad +0.15 rad/s en victoria, -0.10 rad/s en derrota) y
+anillos concéntricos con fade radial (O4/R4 según outcome). Tras 2.8 s de
+hold, o al hacer click/key, emite `finished` y RunScene cambia a MetaHub.
+
+### 9.3 Choice-tag chips (24×24, `tools/art_gen/gen_choice_chips.py`)
+Cinco emblemas octagonales con un ring dorado unificado. La cara D2
+aloja la silueta del arquetipo y todos comparten notches dorados en los
+puntos cardinales para que, pegados uno encima de otro en botones
+verticales, creen un ritmo visible:
+
+| Slug | Emblema | Momento de uso |
+|------|--------|----------------|
+| `tag_force` | Lanzas cruzadas sobre escudo R2 con remaches dorados | Opción agresiva: crisis ≥ +5 o controla regiones por la fuerza |
+| `tag_diplomacy` | Laurel verde + paloma C4 con ojo | Ganancia de estabilidad/influencia sin penalización |
+| `tag_science` | Retorta G2 con burbujas subiendo | Gastas recursos (-6 o más) para bajar crisis |
+| `tag_sacrifice` | Columna rota C3 + humo B3 ascendiendo | Pérdida explícita (stab ≤ -4 o regiones -1) |
+| `tag_economy` | Stack de 3 monedas con muesca de corona | Movimientos puramente económicos |
+
+La inferencia de tag vive en `_infer_choice_tag(choice)`; eventos
+existentes sin campo `tag` se categorizan solos. Cuando un evento futuro
+incluya un `"tag"` explícito en `data/events.json`, el script respeta ese
+valor sin re-inferir.
+
+### 9.4 Fondo de MainMenu (`tools/art_gen/gen_menu_backdrop.py`)
+Mural de 640×360 (x2 para llegar a 1280×720 nearest-neighbor) compuesto
+en cuatro bandas parallax-ready: cielo agrietado con chispazos O4,
+cinco arcos art-deco escalonados con el Canciller iluminado bajo el
+central, friso de doce peregrinos (uno por región del consejo) con
+ojos-speck O3, y piso de cenizas con grietas radiales. Sobre esto va un
+`BackdropShade` D0 α=0.35 para garantizar lectura del título.
+
+El backdrop se renderiza detrás del título vía `TextureRect` con
+`texture_filter = 1` (nearest) y `modulate` 0.78 para que las columnas
+respiren pero no compitan con el logo central.
+
+### 9.5 MetaHub — archivo y tarjetas de tecnología
+`scenes/MetaHub.tscn` reutiliza el `menu_backdrop` con `modulate` 0.55 y un
+`BackdropShade` D0 α=0.55 encima para que la lectura de texto denso
+prevalezca. Las techs se renderizan ahora como tarjetas horizontales con
+cuatro zonas:
+
+1. **Badge** (`*` verde si desbloqueada, `$` oro si asequible, `-` malva si no).
+2. **Info** — nombre a 18 pt + descripción autowrap a 13 pt modulate 0.82.
+3. **Pill de coste** — "NN cr" en O3/D3 según affordability.
+4. **Botón** — "UNLOCKED" (disabled) o "Unlock" (activo sólo si hay créditos).
+
+### 9.6 Tendrils de plaga animados (`region_map.gd::_draw_plague_tendrils`)
+Para cada región con infección ≥ 50%, el mapa pinta una corona de 4-7
+strands rojos curvos que emanan del centroide. Características:
+
+- **Intensidad escalar** con la infección desplegada (0 a 1 entre 50% y 100%).
+- **Seed por-región** `id.hash() & 0xFFFF` para que las regiones ondulen
+  desfasadas entre sí y no parezcan un efecto global.
+- Cada strand es una polyline de 6 segmentos siguiendo
+  `ang0 + sin(t*1.8 + i*0.7 + s*4.5) * 0.45`, con pull-back del 60% en el
+  último 20% del recorrido → se curvan como serpientes.
+- Doble stroke (R4 outer 2.2 px α 0.25-0.70, R3 core 1.0 px α 0.40-0.95)
+  para profundidad sin costar draw calls extra.
+- **Pústula central** pulsando a 3.1 Hz con highlight R4 interior, sirve
+  de "ombligo" de la infección incluso cuando la región está fría.
+
+Se dibuja como Pass 2d (después de coastlines y rings, antes de iconos de
+bioma y labels) para que los strands atraviesen el borde de la región pero
+queden bajo el texto y los biome icons.

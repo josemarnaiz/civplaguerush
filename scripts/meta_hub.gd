@@ -60,24 +60,64 @@ func _render() -> void:
 		var tech_description: String = String(tech.get("description", ""))
 		var tech_cost: int = int(tech.get("cost", 999))
 		var is_unlocked: bool = meta_progression.unlocked_techs.has(tech_id)
+		var affordable: bool = meta_progression.credits >= tech_cost
 
-		var line := HBoxContainer.new()
-		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Card: [left status badge][title + description][cost pill][action]
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-		var label := Label.new()
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.text = "%s (%d) - %s" % [tech_name, tech_cost, tech_description]
-		line.add_child(label)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		card.add_child(row)
+
+		var badge := Label.new()
+		badge.custom_minimum_size = Vector2(28, 0)
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge.text = "*" if is_unlocked else ("$" if affordable else "-")
+		var badge_color: Color = Color(0.659, 0.737, 0.349, 1.0) if is_unlocked else (
+			Color(0.910, 0.753, 0.408, 1.0) if affordable else Color(0.415, 0.313, 0.345, 1.0))
+		badge.add_theme_color_override("font_color", badge_color)
+		badge.add_theme_font_size_override("font_size", 26)
+		row.add_child(badge)
+
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		row.add_child(info)
+
+		var name_label := Label.new()
+		name_label.text = tech_name
+		name_label.add_theme_font_size_override("font_size", 18)
+		info.add_child(name_label)
+
+		if tech_description != "":
+			var desc_label := Label.new()
+			desc_label.text = tech_description
+			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			desc_label.add_theme_font_size_override("font_size", 13)
+			desc_label.modulate = Color(1, 1, 1, 0.82)
+			info.add_child(desc_label)
+
+		var cost_label := Label.new()
+		cost_label.text = "%d cr" % tech_cost
+		cost_label.add_theme_font_size_override("font_size", 16)
+		cost_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		cost_label.add_theme_color_override("font_color",
+			Color(0.780, 0.604, 0.235, 1.0) if (is_unlocked or affordable)
+			else Color(0.362, 0.271, 0.294, 1.0))
+		row.add_child(cost_label)
 
 		var button := Button.new()
-		button.text = "Unlocked" if is_unlocked else "Unlock"
+		button.text = "UNLOCKED" if is_unlocked else "Unlock"
 		button.disabled = is_unlocked
+		button.custom_minimum_size = Vector2(120, 40)
 		if not is_unlocked:
-			button.disabled = meta_progression.credits < tech_cost
+			button.disabled = not affordable
 			button.pressed.connect(_on_unlock_pressed.bind(tech_id))
-		line.add_child(button)
+		row.add_child(button)
 
-		techs_container.add_child(line)
+		techs_container.add_child(card)
 
 
 func _on_unlock_pressed(tech_id: String) -> void:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/run_scene.gd" id="1_runsc"]
 [ext_resource type="PackedScene" path="res://scenes/RegionMap.tscn" id="2_rgmap"]
@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" path="res://assets/art/icons/stat_stability.png" id="5_stab"]
 [ext_resource type="Texture2D" path="res://assets/art/icons/stat_crisis.png" id="6_crisis"]
 [ext_resource type="Texture2D" path="res://assets/art/icons/stat_control.png" id="7_ctrl"]
+[ext_resource type="PackedScene" path="res://scenes/RunEndOverlay.tscn" id="8_endov"]
 
 [node name="RunScene" type="Control"]
 layout_mode = 3
@@ -235,3 +236,6 @@ text = "Decision"
 [node name="BackButton" type="Button" parent="Margin/VBox/Footer"]
 layout_mode = 2
 text = "Main Menu"
+
+[node name="RunEndOverlay" parent="." instance=ExtResource("8_endov")]
+visible = false

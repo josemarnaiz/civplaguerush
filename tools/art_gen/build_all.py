@@ -17,6 +17,8 @@ import gen_infection
 import gen_title
 import gen_ornaments
 import gen_advisors
+import gen_menu_backdrop
+import gen_choice_chips
 import gen_preview
 
 
@@ -44,6 +46,10 @@ def main() -> None:
     gen_ornaments.generate()
     print("== advisors ==")
     gen_advisors.generate()
+    print("== menu backdrop ==")
+    gen_menu_backdrop.generate()
+    print("== choice chips ==")
+    gen_choice_chips.generate()
     print("== preview ==")
     gen_preview.build_preview()
     print("\nAll art regenerated.")
