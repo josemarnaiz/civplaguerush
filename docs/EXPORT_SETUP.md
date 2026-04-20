@@ -4,18 +4,24 @@ This project ships export presets for `WindowsDesktop`, `Web`, and `Android`.
 
 ## Quick commands
 
-From the repository root:
+From the repository root (works with Windows PowerShell 5.1 or PowerShell 7+):
 
-- Check environment and installed templates:
-  - `pwsh -File .\tools\check_export_prereqs.ps1`
+- Install Godot export templates automatically (one-time, idempotent):
+  - `powershell -ExecutionPolicy Bypass -File .\tools\install_export_templates.ps1`
+  - Add `-Force` to reinstall; override version with `-GodotVersion 4.6.2 -GodotChannel stable`.
+- Check environment for a given preset:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\check_export_prereqs.ps1 -Preset Web`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\check_export_prereqs.ps1 -Preset All`
 - Export one platform (debug):
-  - `pwsh -File .\tools\export.ps1 -Preset WindowsDesktop`
-  - `pwsh -File .\tools\export.ps1 -Preset Web`
-  - `pwsh -File .\tools\export.ps1 -Preset Android`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset WindowsDesktop`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset Web`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset Android`
 - Export all presets (debug):
-  - `pwsh -File .\tools\export.ps1 -All`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -All`
 - Release export (single preset):
-  - `pwsh -File .\tools\export.ps1 -Preset WindowsDesktop -Release`
+  - `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset WindowsDesktop -Release`
+- Serve the Web build locally (Python 3 required):
+  - `powershell -ExecutionPolicy Bypass -File .\tools\serve_web.ps1 -Open`
 
 ## Required prerequisites
 
@@ -63,6 +69,10 @@ Preset outputs are aligned with `export_presets.cfg`:
 
 ## Notes
 
-- `tools/export.ps1` runs prerequisite checks by default.
+- `tools/export.ps1` runs prerequisite checks by default and is **preset-aware**: exporting `Web` does not require Java/Android SDK.
 - Use `-SkipPrereqCheck` only for local experiments.
 - If `-All` is used, the script continues through presets and returns non-zero if any platform failed.
+
+## CI
+
+GitHub Actions (`.github/workflows/build.yml`) builds Windows and Web on every push to `main` and on pull requests, uploading the artifacts. Android is intentionally skipped in CI until the Android SDK image is wired up.

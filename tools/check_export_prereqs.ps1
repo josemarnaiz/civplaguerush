@@ -1,6 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$GodotPath = "",
+    [ValidateSet("All", "WindowsDesktop", "Web", "Android")]
+    [string]$Preset = "All",
     [switch]$Json
 )
 
@@ -54,9 +56,12 @@ $webDebug = Join-Path $templateRoot "web_nothreads_debug.zip"
 $webRelease = Join-Path $templateRoot "web_nothreads_release.zip"
 $androidTpl = Join-Path $templateRoot "android_source.zip"
 
+$needWeb = ($Preset -eq "All") -or ($Preset -eq "Web")
+$needAndroid = ($Preset -eq "All") -or ($Preset -eq "Android")
+
 $results += Add-Result -Name "templates_windows" -Ok $true -Required $false -Details "Windows template ships with editor binaries."
-$results += Add-Result -Name "templates_web" -Ok ((Test-Path -LiteralPath $webDebug) -and (Test-Path -LiteralPath $webRelease)) -Required $true -Details "Expected: $webDebug and $webRelease"
-$results += Add-Result -Name "templates_android" -Ok (Test-Path -LiteralPath $androidTpl) -Required $true -Details "Expected: $androidTpl"
+$results += Add-Result -Name "templates_web" -Ok ((Test-Path -LiteralPath $webDebug) -and (Test-Path -LiteralPath $webRelease)) -Required $needWeb -Details "Expected: $webDebug and $webRelease"
+$results += Add-Result -Name "templates_android" -Ok (Test-Path -LiteralPath $androidTpl) -Required $needAndroid -Details "Expected: $androidTpl"
 
 $javaOk = $false
 $javaDetail = "JAVA_HOME not set"
@@ -69,7 +74,7 @@ if ($env:JAVA_HOME) {
         $javaDetail = "JAVA_HOME set but java.exe missing under bin/"
     }
 }
-$results += Add-Result -Name "java_sdk" -Ok $javaOk -Required $true -Details $javaDetail
+$results += Add-Result -Name "java_sdk" -Ok $javaOk -Required $needAndroid -Details $javaDetail
 
 $sdkRoot = ""
 if ($env:ANDROID_SDK_ROOT) { $sdkRoot = $env:ANDROID_SDK_ROOT }
@@ -85,7 +90,7 @@ if ($sdkRoot) {
     $androidOk = (Test-Path -LiteralPath $adb) -and $hasBuildTools
     $androidDetails = "SDK: $sdkRoot | adb: $([bool](Test-Path -LiteralPath $adb)) | build-tools: $hasBuildTools"
 }
-$results += Add-Result -Name "android_sdk" -Ok $androidOk -Required $true -Details $androidDetails
+$results += Add-Result -Name "android_sdk" -Ok $androidOk -Required $needAndroid -Details $androidDetails
 
 $summary = [PSCustomObject]@{
     ok = (($results | Where-Object { $_.required -and -not $_.ok } | Measure-Object).Count -eq 0)
@@ -111,3 +116,5 @@ if ($Json) {
 if (-not $summary.ok) {
     exit 1
 }
+
+exit 0

@@ -80,7 +80,8 @@ if (-not $SkipPrereqCheck) {
         throw "Prereq check script missing: $checkScript"
     }
     Write-Host "Running prerequisite check..."
-    & $checkScript -GodotPath $godot
+    $presetForCheck = if ($All) { "All" } else { $Preset }
+    & $checkScript -GodotPath $godot -Preset $presetForCheck
     if ($LASTEXITCODE -ne 0) {
         throw "Prerequisite check failed. Fix reported items or use -SkipPrereqCheck."
     }
