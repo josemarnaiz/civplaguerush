@@ -32,3 +32,9 @@ Run telemetry is written to `user://metrics_runs.jsonl` with:
 - `project.godot` configured with mobile renderer and stretch mode.
 - `scripts/systems/platform_profile.gd` adapts control sizing by platform feature flags.
 - `export_presets.cfg` includes baseline Web, Windows, and Android export presets.
+
+## Build and Export
+- Check environment requirements: `pwsh -File .\tools\check_export_prereqs.ps1`
+- Export one preset: `pwsh -File .\tools\export.ps1 -Preset WindowsDesktop`
+- Export all presets: `pwsh -File .\tools\export.ps1 -All`
+- Full setup and troubleshooting: `docs/EXPORT_SETUP.md`
