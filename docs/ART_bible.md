@@ -197,6 +197,79 @@ Antes de dar un asset por "done":
 | MainMenu | `title_logo` (CIVPLAGUERUSH), 2× divisores, `ChapterPanel` con marco dark, botones gold |
 | RunScene | Mapa orgánico con 12 biomas + sigilo de plaga + rosa de los vientos, HUD de 5 badges con icons (columna, corona, cáliz, calavera, estandarte), panel de evento con icon 40×40, footer con `Main Menu` |
 | MetaHub | Título `ASHEN ARCHIVE`, cáliz + créditos, 2× divisores, tech list en panel dark, `Play Again` / `Main Menu` |
-| RegionMap (custom draw) | Polígonos orgánicos tweened, dashed adjacency routes, infection tile overlay, plague sigil pulse, compass rose, biome icons sobre centroides |
+| RegionMap (custom draw) | Ver sección 7 |
 
 **Pipeline generador** (`python tools/art_gen/build_all.py`) regenera toda la galería desde código.
+
+---
+
+## 7. Mapamundi continental (`scripts/ui/region_map.gd`)
+
+El mapa se ha reescrito para leerse como un mapamundi tipo Risk/Imperialism,
+no como un enjambre de blobs aislados.
+
+### 7.1 Topología
+Tres bandas latitudinales con seas entre ellas. Las 12 regiones se distribuyen
+siguiendo el `CONTINENT_LAYOUT`:
+
+```
+Row 0 (Norte):       [r01, r02, r03, r04]  -> un solo continente Eurasia-like
+Row 1 (Ecuador):     [r05, r06] | [r07, r08]  -> dos continentes con golfo atlántico
+Row 2 (Sur):         [r09] | [r10] | [r11, r12]  -> isla, archipiélago, continente
+```
+
+- Las regiones de un mismo grupo **comparten costa interior**: el polígono de
+  `r02` empieza exactamente donde acaba el de `r01`, sin hueco oceánico.
+- Los bordes internos (p.ej. r01|r02) se dibujan como **línea dorada
+  punteada** (`INTERNAL_BORDER`, O3 alpha 0.70), para que se lean como
+  frontera política y no como costa.
+- Los bordes exteriores de cada continente se dibujan como polyline oscura
+  gruesa (`COAST_COLOR` 1.6 px) con halo cream (`COAST_GLOW` 3.2 px) debajo,
+  imitando pintura a mano sobre pergamino.
+
+### 7.2 Geometría de costa
+Para cada continente se muestrean 12 puntos por columna a lo largo del top y
+bottom. La ordenada aplica tres sinusoidales superpuestas:
+- **Continental** (0.75 ciclos por grupo, amp 0.018-0.055): curvatura grande.
+- **Media** (2.0-2.2 ciclos, amp 0.014): bahías y cabos.
+- **Fina** (4.1-4.7 ciclos, amp 0.006): detalle costero.
+
+Además se aplica un **eje continental** (sin amp 0.010-0.040, phase por-continente)
+que desplaza **TODO** el continente arriba/abajo a lo largo de su largo → el
+resultado es un continente que serpentea, no una barra horizontal.
+
+Los extremos se tapera (smoothstep 12%) para que las costas norte/sur se unan
+limpiamente con las costas laterales (oeste/este) que se generan como curvas
+verticales con indentación SIDE_COAST_INDENT = 0.014.
+
+### 7.3 Océano animado (5 pases `_draw`)
+1. `_draw_ocean_gradient` — bandas horizontales D1→D0 arriba y cálida abajo.
+2. `_draw_latitude_lines` — 3 líneas punteadas (tropics + ecuador) a 23%/50%/77%.
+3. `_draw_ocean_flecks` — chispas sal deterministas (36 puntos, seed 0xC1A7E).
+4. `_draw_ocean_currents` — 5 curvas sinusoidales horizontales que fluyen con
+   `_time`; cada una con fase y amplitud distintas (gold alpha 0.16 pulsante).
+5. `_draw_cloud_shadows` — 3 nubes cream drift con velocidades 7.5/12/15 px/s,
+   wrap horizontal.
+
+### 7.4 Islotes decorativos
+`_generate_ocean_islets()` siembra 11 blobs pequeños no-interactivos en los
+mares (entre filas) para romper la sensación de rectángulos vacíos. Usan la
+misma doble-costa (halo + dark) y shadow offset que los continentes.
+
+### 7.5 Animaciones de juego
+- **Halo de shelf** (`_draw_shelf_halos`): expand 1.2% de cada continente en
+  `OCEAN_SHELF` → plataforma continental soft que ancla la tierra al mar.
+- **Flash de turno** (`trigger_turn_flash`): invocado desde
+  `run_scene._finalize_turn()`. 0.65s de fade-out dorado en bandas verticales
+  + sheen horizontal que sube desde 45% de altura.
+- **Pulse de target activo** (existente): anillo dorado con seno 2.8 Hz sobre
+  la región afectada por el evento actual.
+- **Pulse de sigilo de plaga** (existente): halo rojo palpitando 3.5 Hz sobre
+  la región más infectada.
+- **Tween de color de tierra** (existente): influencia se interpola con
+  `TWEEN_SPEED=6.5`, para que la transición neutral → rival sea suave.
+- **Flash de pérdida de control** (existente): anillo R4 que fade over 1.2s.
+
+### 7.6 Layout final
+- `Vector2(0, 220)` altura mínima del RegionMap en RunScene (ajustada para
+  que cabecera + HUD + evento + footer fit en 720p sin overflow).
