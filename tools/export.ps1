@@ -46,6 +46,21 @@ function Preset-Path {
     }
 }
 
+function Ensure-Imported {
+    param([string]$Godot)
+
+    $importedDir = Join-Path $projectRoot ".godot/imported"
+    if (Test-Path -LiteralPath $importedDir) {
+        $hasArtifacts = (Get-ChildItem -LiteralPath $importedDir -Filter "*.ctex" -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+        if ($hasArtifacts) { return }
+    }
+    Write-Host "--- Importing project (cold cache) ---"
+    & $Godot --headless --path $projectRoot --import --quit | Out-Null
+    # First import sometimes returns a non-zero status while still producing
+    # valid .ctex files. Run a second pass so subsequent exports see them.
+    & $Godot --headless --path $projectRoot --import --quit | Out-Null
+}
+
 function Run-Export {
     param(
         [string]$Godot,
@@ -56,6 +71,8 @@ function Run-Export {
     $absOut = Join-Path $projectRoot $relativeOut
     $outDir = Split-Path -Parent $absOut
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+    Ensure-Imported -Godot $Godot
 
     $modeFlag = if ($Release) { "--export-release" } else { "--export-debug" }
     Write-Host ("--- Exporting {0} ({1}) ---" -f $PresetName, $modeFlag)
