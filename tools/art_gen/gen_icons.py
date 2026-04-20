@@ -125,65 +125,126 @@ def chalice() -> Image.Image:
 # ---------- SKULL (Crisis) --------------------------------------------------
 
 def skull() -> Image.Image:
+    """Symmetrical skull centered horizontally at x=15.5 (even-pixel grid 7..24).
+
+    Anatomy plan:
+      - Cranium dome: y=4..17, x=7..24, slightly squared on top.
+      - Temple pinch at y=17..18 (brow ridge → cheekbones).
+      - Zygomatic/jaw: tapered rows y=18..24.
+      - Two big square eye sockets with tear drops.
+      - Heart-shaped nasal cavity.
+      - Four distinct upper teeth + chin seam.
+      Light comes from top-left: left side gets C4, right gets C3/C2.
+    """
     img = new_image(SZ, SZ)
-    # Cranium: oval centered at (15, 11), radii (8, 7)
-    cx, cy = 15, 11
-    rx, ry = 8, 7
-    for y in range(SZ):
-        for x in range(SZ):
-            dx = (x - cx) / rx
-            dy = (y - cy) / ry
-            d = dx * dx + dy * dy
-            if d <= 1.0:
-                put(img, x, y, c("C4"))
-            elif d <= 1.22:
-                put(img, x, y, c("D0"))
 
-    # Darker shading on the right side of cranium (light from top-left)
-    for y in range(5, 17):
-        for x in range(15, 23):
-            px = img.getpixel((x, y))
-            if px == c("C4"):
-                dx = (x - cx) / rx
-                if dx > 0.45:
-                    put(img, x, y, c("C3"))
-                if dx > 0.75:
-                    put(img, x, y, c("C2"))
-
-    # Eye sockets: two dark rectangles
-    fill_rect(img, 9, 10, 12, 13, c("D0"))
-    fill_rect(img, 10, 11, 11, 12, c("D2"))
-    fill_rect(img, 17, 10, 20, 13, c("D0"))
-    fill_rect(img, 18, 11, 19, 12, c("D2"))
-
-    # Nasal triangle (inverted) below eyes
-    put(img, 15, 14, c("D0"))
-    fill_rect(img, 14, 15, 16, 15, c("D0"))
-    fill_rect(img, 13, 16, 17, 16, c("D0"))
-    put(img, 15, 16, c("D2"))
-
-    # Jaw: narrower section y=19..22
-    jaw_rows = [
-        (19, 11, 19),
-        (20, 12, 18),
-        (21, 13, 17),
-        (22, 14, 16),
+    # --- Cranium silhouette (symmetric, precomputed row extents) ------------
+    # Each row: (y, x_left, x_right)  inclusive.  Mirrored around center 15.5.
+    cranium = [
+        ( 4, 11, 20),
+        ( 5, 10, 21),
+        ( 6,  9, 22),
+        ( 7,  8, 23),
+        ( 8,  7, 24),
+        ( 9,  7, 24),
+        (10,  7, 24),
+        (11,  7, 24),
+        (12,  7, 24),
+        (13,  7, 24),
+        (14,  7, 24),
+        (15,  8, 23),
+        (16,  8, 23),
+        (17,  9, 22),
     ]
-    for y, left, right in jaw_rows:
-        fill_rect(img, left, y, right, y, c("C3"))
-        put(img, left - 1, y, c("D0"))
-        put(img, right + 1, y, c("D0"))
-    # Close jaw bottom
-    hline(img, 14, 16, 23, c("D0"))
+    jaw = [
+        (18,  9, 22),
+        (19, 10, 21),
+        (20, 10, 21),
+        (21, 11, 20),
+        (22, 12, 19),
+        (23, 13, 18),
+        (24, 14, 17),
+    ]
+    # Fill base (cream) and compute outline as 1px shell.
+    for y, xl, xr in cranium + jaw:
+        fill_rect(img, xl, y, xr, y, c("C4"))
+    # Outline: any cream pixel with an empty neighbor becomes D0.
+    shell = []
+    for y, xl, xr in cranium + jaw:
+        for x in (xl, xr):
+            shell.append((x, y))
+    for x, y in shell:
+        put(img, x, y, c("D0"))
+    # Also seal between cranium y=17 and jaw y=18 at inner edges (so it reads closed).
+    put(img, 8, 17, c("D0"))   # extra temple dot
+    put(img, 23, 17, c("D0"))
 
-    # Teeth: vertical marks on jaw top
-    for tx in (12, 14, 16, 18):
-        put(img, tx, 19, c("D0"))
+    # --- Light shading on right half (light from top-left) ------------------
+    for y, xl, xr in cranium + jaw:
+        for x in range(15, xr):
+            if img.getpixel((x, y)) == c("C4"):
+                rel = (x - 15) / max(1, xr - 15)
+                if rel > 0.65:
+                    put(img, x, y, c("C2"))
+                elif rel > 0.3:
+                    put(img, x, y, c("C3"))
+    # Bottom-right of jaw deeper shadow.
+    for y in (21, 22, 23, 24):
+        for x in range(16, 20):
+            if img.getpixel((x, y)) == c("C3") or img.getpixel((x, y)) == c("C2"):
+                continue
+            if img.getpixel((x, y)) == c("C4"):
+                put(img, x, y, c("C3"))
 
-    # Small crack detail at top of cranium
-    put(img, 14, 6, c("D2"))
-    put(img, 14, 7, c("D2"))
-    put(img, 15, 8, c("D2"))
+    # --- Eye sockets (big, square, menacing) --------------------------------
+    # Left socket x=9..13 y=9..13, right socket x=17..21 y=9..13.
+    fill_rect(img,  9,  9, 13, 13, c("D0"))
+    fill_rect(img, 10, 10, 12, 12, c("D2"))
+    put(img, 10, 10, c("D4"))         # darker upper-left corner tear
+    fill_rect(img, 17,  9, 21, 13, c("D0"))
+    fill_rect(img, 18, 10, 20, 12, c("D2"))
+    put(img, 20, 10, c("D4"))
+    # Eye socket highlight dot (one tiny glint on upper-inner rim).
+    put(img, 13,  9, c("C4"))
+    put(img, 17,  9, c("C4"))
+
+    # --- Nasal cavity: inverted heart ---------------------------------------
+    # Two tiny circles joined into a V.
+    fill_rect(img, 14, 15, 15, 16, c("D0"))
+    fill_rect(img, 16, 15, 17, 16, c("D0"))
+    fill_rect(img, 15, 17, 16, 17, c("D0"))
+    put(img, 15, 18, c("D0"))
+    put(img, 16, 18, c("D0"))
+    # Tiny inner shadow hint.
+    put(img, 15, 16, c("D2"))
+    put(img, 16, 16, c("D2"))
+
+    # --- Teeth (upper row on jaw seam at y=19) ------------------------------
+    # Seam line under the nasal cavity.
+    hline(img, 10, 21, 19, c("D0"))
+    # Four teeth separators at x=12, 14, 17, 19 leaving gaps.
+    for tx in (12, 14, 17, 19):
+        put(img, tx, 20, c("D0"))
+    # Teeth fill (cream between separators).
+    for tx in (13, 15, 16, 18, 20):
+        put(img, tx, 20, c("C3"))
+
+    # --- Chin seam (subtle vertical shadow) ---------------------------------
+    put(img, 15, 23, c("C2"))
+    put(img, 16, 23, c("C2"))
+    put(img, 15, 24, c("D2"))
+    put(img, 16, 24, c("D2"))
+
+    # --- Cranium detail: hairline crack from top-center drifting right ------
+    put(img, 15,  5, c("D2"))
+    put(img, 15,  6, c("D2"))
+    put(img, 16,  7, c("D2"))
+    put(img, 16,  8, c("D2"))
+    put(img, 17,  9, c("D2"))
+
+    # --- Top-left highlight on cranium (single sheen) -----------------------
+    put(img,  9,  7, c("O5"))
+    put(img, 10,  6, c("O5"))
 
     return img
 

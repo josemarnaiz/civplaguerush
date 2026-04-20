@@ -94,9 +94,9 @@ def generate_all() -> None:
             ornament_hi="O5", ornament_lo="O3", pressed=False,
         ),
         "button_pressed.png": dict(
-            outline="D0", gold_dark="O1", gold_mid="O2", gold_hi="O3",
-            fill="C2", shadow_hi="C3", shadow_lo="D4",
-            ornament_hi="O3", ornament_lo="O1", pressed=True,
+            outline="D0", gold_dark="O1", gold_mid="O1", gold_hi="O2",
+            fill="D4", shadow_hi="D2", shadow_lo="D0",
+            ornament_hi="O2", ornament_lo="D2", pressed=True,
         ),
         "button_disabled.png": dict(
             outline="D1", gold_dark="B1", gold_mid="B2", gold_hi="B3",
