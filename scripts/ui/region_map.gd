@@ -18,9 +18,17 @@ const EDGE_COLOR: Color = Color(0.60, 0.78, 0.92, 0.45)
 const BORDER_COLOR: Color = Color(0.05, 0.08, 0.11, 0.95)
 const RING_CONTROLLED: Color = Color(0.60, 1.00, 0.65, 0.9)
 const RING_SELECTABLE: Color = Color(1.00, 0.88, 0.28, 1.0)
+const RING_ACTIVE_TARGET: Color = Color(1.00, 0.78, 0.24, 1.0)   # gold O3 from Ashen Fresco
 const RING_HOVER: Color = Color(1, 1, 1, 0.45)
 const SHADOW_COLOR: Color = Color(0, 0, 0, 0.42)
 const STAR_COLOR: Color = Color(0.25, 0.85, 1.0, 0.9)
+const TOOLTIP_BG: Color = Color(0.05, 0.08, 0.11, 0.93)
+const TOOLTIP_BORDER: Color = Color(0.78, 0.60, 0.24, 0.95)
+const TOOLTIP_TITLE: Color = Color(0.96, 0.90, 0.68, 1.0)
+const TOOLTIP_TEXT: Color = Color(0.88, 0.85, 0.80, 1.0)
+
+const TWEEN_SPEED: float = 6.5          # higher = snappier approach of display values
+const TOOLTIP_DELAY: float = 0.35       # seconds hovering before tooltip shows
 
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)
@@ -28,7 +36,11 @@ var _centroids: Dictionary = {}       # id -> Vector2 normalized
 var _adjacency_edges: Array = []      # [[Vector2, Vector2, "direction_label"], ...]
 var _selectable_ids: Dictionary = {}
 var _selection_active: bool = false
+var _active_target_id: String = ""
 var _hover_id: String = ""
+var _hover_since: float = -1.0
+var _last_mouse_pos: Vector2 = Vector2.ZERO
+var _display_values: Dictionary = {}  # id -> {influence: float, infection: float}
 var _time: float = 0.0
 
 
@@ -39,8 +51,32 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_update_display_values(delta)
 	if not _snapshot.is_empty():
 		queue_redraw()
+
+
+func _update_display_values(delta: float) -> void:
+	if _snapshot.is_empty():
+		return
+	var k: float = clampf(delta * TWEEN_SPEED, 0.0, 1.0)
+	for r in _snapshot:
+		var id: String = String(r.get("id", ""))
+		var target_infl: float = float(int(r.get("influence", 0)))
+		var target_inf: float = float(int(r.get("infection", 0)))
+		if not _display_values.has(id):
+			_display_values[id] = { "influence": target_infl, "infection": target_inf }
+			continue
+		var d: Dictionary = _display_values[id]
+		d["influence"] = lerp(float(d["influence"]), target_infl, k)
+		d["infection"] = lerp(float(d["infection"]), target_inf, k)
+		_display_values[id] = d
+
+
+func _display_for(id: String, key: String, fallback: float) -> float:
+	if _display_values.has(id):
+		return float(_display_values[id].get(key, fallback))
+	return fallback
 
 
 func build_from_snapshot(snapshot: Array) -> void:
@@ -69,6 +105,19 @@ func set_selectable(ids: Array) -> void:
 func clear_selectable() -> void:
 	_selectable_ids.clear()
 	_selection_active = false
+	queue_redraw()
+
+
+# Marks the region that the current regional event acts on, so the map
+# pulses it in gold to visually tie the event text ("Outbreak in X") to
+# its target on the grid.
+func set_active_target(region_id: String) -> void:
+	_active_target_id = String(region_id)
+	queue_redraw()
+
+
+func clear_active_target() -> void:
+	_active_target_id = ""
 	queue_redraw()
 
 
@@ -179,14 +228,19 @@ func _draw() -> void:
 			draw_colored_polygon(shadow, SHADOW_COLOR)
 
 	# Pass 2: land fill + infection overlay + borders + rings.
+	# Colors use tweened display values so transitions are smooth; rings still
+	# key off the logical snapshot so e.g. a newly-controlled region gets its
+	# ring immediately without waiting for the lerp to converge.
+	var target_pulse: float = (sin(_time * 2.8) + 1.0) * 0.5   # 0..1
 	for r in _snapshot:
 		var id: String = String(r.get("id", ""))
 		if not _polygons.has(id):
 			continue
 		var influence: int = int(r.get("influence", 0))
-		var infection: int = int(r.get("infection", 0))
-		var fill: Color = _influence_color(influence)
-		var inf_alpha: float = clampf(float(infection) / 100.0 * 0.72, 0.0, 0.72)
+		var display_infl: float = _display_for(id, "influence", float(influence))
+		var display_inf: float = _display_for(id, "infection", float(int(r.get("infection", 0))))
+		var fill: Color = _influence_color(display_infl)
+		var inf_alpha: float = clampf(display_inf / 100.0 * 0.72, 0.0, 0.72)
 		var border_w: float = 1.6
 		var ring_color: Color = Color(0, 0, 0, 0)
 		var ring_w: float = 0.0
@@ -214,6 +268,11 @@ func _draw() -> void:
 			draw_polyline(closed, BORDER_COLOR, border_w, true)
 			if ring_color.a > 0.0:
 				draw_polyline(closed, ring_color, ring_w, true)
+			if _active_target_id == id:
+				var target_col: Color = RING_ACTIVE_TARGET
+				target_col.a = 0.55 + target_pulse * 0.45
+				var target_w: float = 2.4 + target_pulse * 2.6
+				draw_polyline(closed, target_col, target_w, true)
 			if _hover_id == id:
 				draw_polyline(closed, RING_HOVER, 1.2, true)
 
@@ -263,6 +322,68 @@ func _draw() -> void:
 		var c: Vector2 = _centroids[id] * s + Vector2(0, -18)
 		_draw_star(c, 4.5, STAR_COLOR)
 
+	# Pass 6: tooltip for the hovered region (after a short delay).
+	_draw_hover_tooltip(s)
+
+
+func _draw_hover_tooltip(s: Vector2) -> void:
+	if _hover_id == "":
+		return
+	if _hover_since < 0.0 or _time - _hover_since < TOOLTIP_DELAY:
+		return
+	var region: Dictionary = {}
+	for r in _snapshot:
+		if String(r.get("id", "")) == _hover_id:
+			region = r
+			break
+	if region.is_empty():
+		return
+	var font: Font = get_theme_default_font()
+	if font == null:
+		return
+
+	var title: String = String(region.get("name", ""))
+	var stats: String = "Influence %d    Infection %d    Stability %d" % [
+		int(region.get("influence", 0)),
+		int(region.get("infection", 0)),
+		int(region.get("stability", 0))
+	]
+	var neighbors: Array = region.get("neighbors", [])
+	var neighbors_line: String = "Neighbors: %d" % neighbors.size()
+
+	var title_size: int = 14
+	var text_size: int = 11
+	var ts: Vector2 = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size)
+	var ss: Vector2 = font.get_string_size(stats, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size)
+	var ns: Vector2 = font.get_string_size(neighbors_line, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size)
+
+	var pad_x: float = 10.0
+	var pad_y: float = 8.0
+	var line_gap: float = 4.0
+	var w: float = max(ts.x, max(ss.x, ns.x)) + pad_x * 2.0
+	var h: float = ts.y + ss.y + ns.y + line_gap * 2.0 + pad_y * 2.0
+
+	var pos: Vector2 = _last_mouse_pos + Vector2(14.0, -10.0)
+	if pos.x + w > s.x:
+		pos.x = _last_mouse_pos.x - w - 14.0
+	if pos.y + h > s.y:
+		pos.y = s.y - h - 2.0
+	if pos.x < 0.0:
+		pos.x = 0.0
+	if pos.y < 0.0:
+		pos.y = 0.0
+
+	var rect := Rect2(pos, Vector2(w, h))
+	draw_rect(rect, TOOLTIP_BG)
+	draw_rect(rect, TOOLTIP_BORDER, false, 1.2)
+
+	var cursor: Vector2 = pos + Vector2(pad_x, pad_y + ts.y - 2.0)
+	draw_string(font, cursor, title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size, TOOLTIP_TITLE)
+	cursor.y += ss.y + line_gap
+	draw_string(font, cursor, stats, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size, TOOLTIP_TEXT)
+	cursor.y += ns.y + line_gap
+	draw_string(font, cursor, neighbors_line, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size, TOOLTIP_TEXT)
+
 
 func _draw_dashed_line(a: Vector2, b: Vector2, color: Color, width: float, dash: float, gap: float) -> void:
 	var total: float = a.distance_to(b)
@@ -308,8 +429,8 @@ func _most_infected_id(min_infection: int) -> String:
 	return worst_id
 
 
-func _influence_color(influence: int) -> Color:
-	var f: float = clampf(float(influence) / 100.0, 0.0, 1.0)
+func _influence_color(influence: float) -> Color:
+	var f: float = clampf(influence / 100.0, 0.0, 1.0)
 	if f <= 0.2:
 		var t: float = f / 0.2
 		return LAND_RIVAL.lerp(LAND_NEUTRAL, t)
@@ -333,9 +454,11 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _handle_hover(pos: Vector2) -> void:
+	_last_mouse_pos = pos
 	var id: String = _region_at(pos)
 	if id != _hover_id:
 		_hover_id = id
+		_hover_since = _time
 		if id != "":
 			emit_signal("region_hovered", id)
 		queue_redraw()

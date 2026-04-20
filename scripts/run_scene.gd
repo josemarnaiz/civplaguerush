@@ -135,6 +135,8 @@ func _render_current_event() -> void:
 	else:
 		_end_region_pick_mode()
 
+	_update_active_target(event_data)
+
 	for choice in event_data.get("choices", []):
 		var button := Button.new()
 		button.text = String(choice.get("label", "Choose"))
@@ -166,6 +168,15 @@ func _end_region_pick_mode() -> void:
 	_awaiting_region_pick = false
 	if region_map.has_method("clear_selectable"):
 		region_map.clear_selectable()
+
+
+func _update_active_target(event_data: Dictionary) -> void:
+	var target_id: String = String(event_data.get("_target_region_id", ""))
+	if target_id == "" or not region_map.has_method("set_active_target"):
+		if region_map.has_method("clear_active_target"):
+			region_map.clear_active_target()
+		return
+	region_map.set_active_target(target_id)
 
 
 # --- Signals ---------------------------------------------------------------
