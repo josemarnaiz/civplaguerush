@@ -64,7 +64,7 @@ text = "Chapter"
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
-custom_minimum_size = Vector2(0, 200)
+custom_minimum_size = Vector2(0, 230)
 
 [node name="StatePanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
