@@ -46,19 +46,27 @@ function Preset-Path {
     }
 }
 
+function Count-CtexFiles {
+    $importedDir = Join-Path $projectRoot ".godot/imported"
+    if (-not (Test-Path -LiteralPath $importedDir)) { return 0 }
+    return (Get-ChildItem -LiteralPath $importedDir -Filter "*.ctex" -ErrorAction SilentlyContinue | Measure-Object).Count
+}
+
 function Ensure-Imported {
     param([string]$Godot)
 
-    $importedDir = Join-Path $projectRoot ".godot/imported"
-    if (Test-Path -LiteralPath $importedDir) {
-        $hasArtifacts = (Get-ChildItem -LiteralPath $importedDir -Filter "*.ctex" -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-        if ($hasArtifacts) { return }
-    }
+    $expected = 30   # rough lower-bound for the project's imported textures
+    if ((Count-CtexFiles) -ge $expected) { return }
+
     Write-Host "--- Importing project (cold cache) ---"
-    & $Godot --headless --path $projectRoot --import --quit | Out-Null
-    # First import sometimes returns a non-zero status while still producing
-    # valid .ctex files. Run a second pass so subsequent exports see them.
-    & $Godot --headless --path $projectRoot --import --quit | Out-Null
+    for ($i = 1; $i -le 3; $i++) {
+        Write-Host ("Import pass {0}..." -f $i)
+        & $Godot --headless --path $projectRoot --import --quit
+        $count = Count-CtexFiles
+        Write-Host ("After pass {0}: {1} .ctex files" -f $i, $count)
+        if ($count -ge $expected) { return }
+    }
+    Write-Host "Warning: only $(Count-CtexFiles) .ctex files generated; export may still fail."
 }
 
 function Run-Export {
@@ -75,14 +83,22 @@ function Run-Export {
     Ensure-Imported -Godot $Godot
 
     $modeFlag = if ($Release) { "--export-release" } else { "--export-debug" }
-    Write-Host ("--- Exporting {0} ({1}) ---" -f $PresetName, $modeFlag)
+    Write-Host ("--- Exporting {0} ({1}) -> {2} ---" -f $PresetName, $modeFlag, $absOut)
 
-    & $Godot --headless --path $projectRoot $modeFlag $PresetName $absOut
-    if ($LASTEXITCODE -ne 0) {
-        throw "Export failed for preset '$PresetName'"
+    & $Godot --headless --path $projectRoot --verbose $modeFlag $PresetName $absOut
+    $exit = $LASTEXITCODE
+    Write-Host ("Godot exited with code {0}" -f $exit)
+    if ($exit -ne 0) {
+        throw "Export failed for preset '$PresetName' (exit $exit)"
     }
 
     if (-not (Test-Path -LiteralPath $absOut)) {
+        Write-Host "Output missing. Listing build dir contents for diagnosis:"
+        if (Test-Path -LiteralPath $outDir) {
+            Get-ChildItem -LiteralPath $outDir -Recurse | Format-Table -AutoSize
+        } else {
+            Write-Host ("Output directory '{0}' does not exist." -f $outDir)
+        }
         throw "Export reported success but output missing: $absOut"
     }
 

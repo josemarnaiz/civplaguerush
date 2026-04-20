@@ -121,10 +121,16 @@ jobs:
           $url = "https://github.com/godotengine/godot/releases/download/${tag}/Godot_v${tag}_win64.exe.zip"
           Invoke-WebRequest -Uri $url -OutFile godot.zip -UseBasicParsing
           Expand-Archive -Force godot.zip -DestinationPath godot
-          $exe = Get-ChildItem godot -Filter "Godot_v*win64.exe" | Where-Object { $_.Name -notlike "*console*" } | Select-Object -First 1
+          $exe = Get-ChildItem godot -Filter "Godot_v*win64.exe" | Select-Object -First 1
           if (-not $exe) { throw "Godot binary missing after extract" }
-          # Use Add-Content with explicit UTF-8 (no BOM) to avoid env parse errors.
           Add-Content -Path $env:GITHUB_ENV -Value "GODOT_PATH=$($exe.FullName)" -Encoding utf8
+          Write-Host "Selected Godot: $($exe.FullName)"
+
+      - name: Smoke-test Godot binary
+        shell: pwsh
+        run: |
+          & $env:GODOT_PATH --version
+          if ($LASTEXITCODE -ne 0) { throw "Godot --version failed with $LASTEXITCODE" }
 
       - name: Install export templates
         if: steps.tpl-cache-win.outputs.cache-hit != 'true'
@@ -141,6 +147,20 @@ jobs:
         shell: pwsh
         run: |
           .\tools\export.ps1 -Preset WindowsDesktop -GodotPath $env:GODOT_PATH
+
+      - name: List build directory (diagnostic)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path build/windows) {
+              Get-ChildItem build/windows -Recurse | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
+          } else {
+              Write-Host "build/windows does not exist"
+          }
+          if (Test-Path .godot/imported) {
+              $count = (Get-ChildItem .godot/imported -Filter *.ctex -ErrorAction SilentlyContinue | Measure-Object).Count
+              Write-Host "imported .ctex files: $count"
+          }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
