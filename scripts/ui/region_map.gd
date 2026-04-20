@@ -23,6 +23,7 @@ const RING_CONTROLLED: Color = Color(0.910, 0.753, 0.407, 1.0) # O4 gold highlig
 const RING_SELECTABLE: Color = Color(0.969, 0.902, 0.659, 1.0) # O5 sheen
 const RING_ACTIVE_TARGET: Color = Color(0.780, 0.604, 0.235, 1.0) # O3 signature
 const RING_HOVER: Color = Color(0.910, 0.831, 0.706, 0.65)     # C4 cream glow
+const RING_LOST: Color = Color(0.851, 0.329, 0.306, 0.95)      # R4 urgent loss flash
 const SHADOW_COLOR: Color = Color(0.059, 0.039, 0.055, 0.55)   # D0 soft shadow
 const STAR_COLOR: Color = Color(0.969, 0.902, 0.659, 0.95)     # O5 sheen star
 const TOOLTIP_BG: Color = Color(0.122, 0.082, 0.125, 0.96)     # D1 deep
@@ -43,20 +44,23 @@ const BIOME_BY_REGION: Dictionary = {
 	"r10": "islands",   "r11": "jungle",    "r12": "volcano",
 }
 
-const BIOME_TEXTURES: Dictionary = {
-	"arcology": preload("res://assets/art/map/biome_arcology.png"),
-	"coast": preload("res://assets/art/map/biome_coast.png"),
-	"wasteland": preload("res://assets/art/map/biome_wasteland.png"),
-	"tundra": preload("res://assets/art/map/biome_tundra.png"),
-	"factory": preload("res://assets/art/map/biome_factory.png"),
-	"tech": preload("res://assets/art/map/biome_tech.png"),
-	"ruins": preload("res://assets/art/map/biome_ruins.png"),
-	"veil": preload("res://assets/art/map/biome_veil.png"),
-	"drylands": preload("res://assets/art/map/biome_drylands.png"),
-	"islands": preload("res://assets/art/map/biome_islands.png"),
-	"jungle": preload("res://assets/art/map/biome_jungle.png"),
-	"volcano": preload("res://assets/art/map/biome_volcano.png"),
+const BIOME_TEXTURE_PATHS: Dictionary = {
+	"arcology": "res://assets/art/map/biome_arcology.png",
+	"coast": "res://assets/art/map/biome_coast.png",
+	"wasteland": "res://assets/art/map/biome_wasteland.png",
+	"tundra": "res://assets/art/map/biome_tundra.png",
+	"factory": "res://assets/art/map/biome_factory.png",
+	"tech": "res://assets/art/map/biome_tech.png",
+	"ruins": "res://assets/art/map/biome_ruins.png",
+	"veil": "res://assets/art/map/biome_veil.png",
+	"drylands": "res://assets/art/map/biome_drylands.png",
+	"islands": "res://assets/art/map/biome_islands.png",
+	"jungle": "res://assets/art/map/biome_jungle.png",
+	"volcano": "res://assets/art/map/biome_volcano.png",
 }
+const INFECTION_TEX_PATH: String = "res://assets/art/map/infection_noise.png"
+const PLAGUE_SIGIL_PATH: String = "res://assets/art/map/plague_sigil.png"
+const INFECTION_TILE_SIZE: float = 32.0
 
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)
@@ -69,11 +73,18 @@ var _hover_id: String = ""
 var _hover_since: float = -1.0
 var _last_mouse_pos: Vector2 = Vector2.ZERO
 var _display_values: Dictionary = {}  # id -> {influence: float, infection: float}
+var _lost_flash_until: Dictionary = {} # id -> time seconds
+var _biome_textures: Dictionary = {}   # biome id -> Texture2D
+var _infection_tex: Texture2D = null
+var _plague_sigil: Texture2D = null
 var _time: float = 0.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# Required so draw_polygon with UVs > 1 actually tiles the infection texture.
+	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	_load_optional_textures()
 	set_process(true)
 
 
@@ -146,6 +157,13 @@ func set_active_target(region_id: String) -> void:
 
 func clear_active_target() -> void:
 	_active_target_id = ""
+	queue_redraw()
+
+
+func flash_region_loss(region_id: String, duration: float = 1.2) -> void:
+	if region_id.is_empty():
+		return
+	_lost_flash_until[region_id] = _time + max(duration, 0.2)
 	queue_redraw()
 
 
@@ -287,9 +305,23 @@ func _draw() -> void:
 
 			draw_colored_polygon(poly, fill)
 			if inf_alpha > 0.02:
-				var ov: Color = INFECTION_COLOR
-				ov.a = inf_alpha
-				draw_colored_polygon(poly, ov)
+				if _infection_tex != null:
+					# Textured infection overlay: tiled noise in world space, tinted
+					# toward red as infection rises. UVs = poly / tile_size produces
+					# seamless tiling regardless of polygon shape.
+					var uvs := PackedVector2Array()
+					for p in poly:
+						uvs.append(p / INFECTION_TILE_SIZE)
+					var cols := PackedColorArray()
+					var tint: Color = INFECTION_COLOR
+					tint.a = clampf(inf_alpha * 1.35, 0.0, 0.92)
+					for i in range(poly.size()):
+						cols.append(tint)
+					draw_polygon(poly, cols, uvs, _infection_tex)
+				else:
+					var flat: Color = INFECTION_COLOR
+					flat.a = clampf(inf_alpha, 0.0, 0.72)
+					draw_colored_polygon(poly, flat)
 
 			var closed := PackedVector2Array(poly)
 			closed.append(poly[0])
@@ -301,10 +333,39 @@ func _draw() -> void:
 				target_col.a = 0.55 + target_pulse * 0.45
 				var target_w: float = 2.4 + target_pulse * 2.6
 				draw_polyline(closed, target_col, target_w, true)
+			if _lost_flash_until.has(id):
+				var until: float = float(_lost_flash_until[id])
+				if _time <= until:
+					var remain: float = clampf((until - _time) / 1.2, 0.0, 1.0)
+					var loss_col: Color = RING_LOST
+					loss_col.a = 0.25 + remain * 0.75
+					draw_polyline(closed, loss_col, 3.2 + (1.0 - remain) * 1.4, true)
+				else:
+					_lost_flash_until.erase(id)
 			if _hover_id == id:
 				draw_polyline(closed, RING_HOVER, 1.2, true)
 
-	# Pass 3: labels.
+	# Pass 3a: biome icons (stacked above labels).
+	for r in _snapshot:
+		var bid: String = String(r.get("id", ""))
+		if not _centroids.has(bid):
+			continue
+		var biome: String = String(BIOME_BY_REGION.get(bid, ""))
+		if biome == "" or not _biome_textures.has(biome):
+			continue
+		var tex: Texture2D = _biome_textures[biome]
+		var bc: Vector2 = _centroids[bid] * s
+		var rect := Rect2(bc + Vector2(-BIOME_ICON_SIZE * 0.5, -BIOME_ICON_SIZE - 2.0),
+			Vector2(BIOME_ICON_SIZE, BIOME_ICON_SIZE))
+		# Slight cream tint when heavily infected, so biomes "rot" visually.
+		var display_inf_biome: float = _display_for(bid, "infection", float(int(r.get("infection", 0))))
+		var tint: Color = Color(1, 1, 1, 1)
+		if display_inf_biome > 40.0:
+			var t: float = clampf((display_inf_biome - 40.0) / 60.0, 0.0, 1.0)
+			tint = Color(1, 1, 1, 1).lerp(Color(1.0, 0.55, 0.45, 1.0), t)
+		draw_texture_rect(tex, rect, false, tint)
+
+	# Pass 3b: labels (under icon).
 	var font: Font = get_theme_default_font()
 	if font != null:
 		var name_size: int = 13
@@ -318,37 +379,49 @@ func _draw() -> void:
 			var stats_text: String = "I:%d V:%d" % [int(r.get("influence", 0)), int(r.get("infection", 0))]
 			var ns: Vector2 = font.get_string_size(short_name, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size)
 			var ss: Vector2 = font.get_string_size(stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size)
-			# Text shadow for readability over any tint.
-			draw_string(font, c - Vector2(ns.x / 2.0, -2.0) + Vector2(1, 1), short_name,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(0, 0, 0, 0.6))
-			draw_string(font, c - Vector2(ns.x / 2.0, -2.0), short_name,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(1, 1, 1, 0.98))
-			draw_string(font, c - Vector2(ss.x / 2.0, -16.0) + Vector2(1, 1), stats_text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(0, 0, 0, 0.5))
-			draw_string(font, c - Vector2(ss.x / 2.0, -16.0), stats_text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(1, 1, 1, 0.88))
+			# Name sits just below the biome icon; stats under the name.
+			var name_pos: Vector2 = Vector2(c.x - ns.x / 2.0, c.y + 12.0)
+			var stats_pos: Vector2 = Vector2(c.x - ss.x / 2.0, c.y + 24.0)
+			draw_string(font, name_pos + Vector2(1, 1), short_name,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(0, 0, 0, 0.75))
+			draw_string(font, name_pos, short_name,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, TOOLTIP_TITLE)
+			draw_string(font, stats_pos + Vector2(1, 1), stats_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(0, 0, 0, 0.6))
+			draw_string(font, stats_pos, stats_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, TOOLTIP_TEXT)
 
-	# Pass 4: pulse on the most-infected region (the outbreak focus).
+	# Pass 4: plague sigil on the most-infected region (the outbreak focus).
+	# A pulsing halo behind the sigil reads as a warning beacon.
 	var worst_id: String = _most_infected_id(40)
 	if worst_id != "" and _centroids.has(worst_id):
-		var c: Vector2 = _centroids[worst_id] * s
+		var wc: Vector2 = _centroids[worst_id] * s
 		var t: float = (sin(_time * 3.5) + 1.0) * 0.5  # 0..1
-		var radius: float = 7.0 + t * 10.0
-		var col: Color = INFECTION_COLOR
-		col.a = 0.18 + 0.42 * (1.0 - t)
-		draw_arc(c, radius, 0, TAU, 32, col, 2.2, true)
-		col.a = 0.85
-		draw_circle(c, 2.4, col)
+		var halo: Color = INFECTION_COLOR
+		halo.a = 0.20 + 0.35 * (1.0 - t)
+		draw_circle(wc, 14.0 + t * 6.0, halo)
+		if _plague_sigil != null:
+			# Draw sigil centered, slightly scaled by pulse for the "beat" feel.
+			var sz_base: float = 20.0
+			var sz_s: float = sz_base + t * 3.0
+			var rect := Rect2(wc - Vector2(sz_s * 0.5, sz_s * 0.5),
+				Vector2(sz_s, sz_s))
+			var sig_tint: Color = Color(1, 1, 1, 0.75 + 0.25 * t)
+			draw_texture_rect(_plague_sigil, rect, false, sig_tint)
+		else:
+			draw_circle(wc, 4.0, Color(1.0, 0.7, 0.7, 0.9))
 
-	# Pass 5: capital star on each player-controlled region.
+	# Pass 5: capital star on each player-controlled region (upper-right of biome icon).
 	for r in _snapshot:
 		if int(r.get("influence", 0)) < CONTROL_THRESHOLD:
 			continue
 		var id: String = String(r.get("id", ""))
 		if not _centroids.has(id):
 			continue
-		var c: Vector2 = _centroids[id] * s + Vector2(0, -18)
-		_draw_star(c, 4.5, STAR_COLOR)
+		var c: Vector2 = _centroids[id] * s + Vector2(BIOME_ICON_SIZE * 0.5 + 2.0, -BIOME_ICON_SIZE - 2.0)
+		# Backing disc for contrast, then gold star.
+		draw_circle(c, 5.0, Color(0.059, 0.039, 0.055, 0.85))
+		_draw_star(c, 4.2, STAR_COLOR)
 
 	# Pass 6: tooltip for the hovered region (after a short delay).
 	_draw_hover_tooltip(s)
@@ -444,6 +517,25 @@ func _draw_star(center: Vector2, r: float, color: Color) -> void:
 		var radius: float = r if (i % 2 == 0) else r * 0.45
 		pts.append(center + Vector2(cos(ang) * radius, sin(ang) * radius))
 	draw_colored_polygon(pts, color)
+
+
+func _load_optional_textures() -> void:
+	_biome_textures.clear()
+	for key in BIOME_TEXTURE_PATHS.keys():
+		var tex: Texture2D = _safe_load_texture(String(BIOME_TEXTURE_PATHS[key]))
+		if tex != null:
+			_biome_textures[String(key)] = tex
+	_infection_tex = _safe_load_texture(INFECTION_TEX_PATH)
+	_plague_sigil = _safe_load_texture(PLAGUE_SIGIL_PATH)
+
+
+func _safe_load_texture(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		return null
+	var res: Resource = ResourceLoader.load(path)
+	if res is Texture2D:
+		return res as Texture2D
+	return null
 
 
 func _most_infected_id(min_infection: int) -> String:

@@ -1,7 +1,12 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/run_scene.gd" id="1_runsc"]
 [ext_resource type="PackedScene" path="res://scenes/RegionMap.tscn" id="2_rgmap"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/stat_influence.png" id="3_infl"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/stat_resources.png" id="4_res"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/stat_stability.png" id="5_stab"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/stat_crisis.png" id="6_crisis"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/stat_control.png" id="7_ctrl"]
 
 [node name="RunScene" type="Control"]
 layout_mode = 3
@@ -59,10 +64,105 @@ custom_minimum_size = Vector2(0, 280)
 [node name="StatePanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
 
-[node name="StatsLabel" type="Label" parent="Margin/VBox/StatePanel"]
+[node name="StatsBox" type="HBoxContainer" parent="Margin/VBox/StatePanel"]
 layout_mode = 2
-autowrap_mode = 2
-text = "Stats"
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Stability" type="HBoxContainer" parent="Margin/VBox/StatePanel/StatsBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Margin/VBox/StatePanel/StatsBox/Stability"]
+layout_mode = 2
+custom_minimum_size = Vector2(28, 28)
+texture = ExtResource("5_stab")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="Value" type="Label" parent="Margin/VBox/StatePanel/StatsBox/Stability"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 20
+text = "0"
+vertical_alignment = 1
+
+[node name="Influence" type="HBoxContainer" parent="Margin/VBox/StatePanel/StatsBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Margin/VBox/StatePanel/StatsBox/Influence"]
+layout_mode = 2
+custom_minimum_size = Vector2(28, 28)
+texture = ExtResource("3_infl")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="Value" type="Label" parent="Margin/VBox/StatePanel/StatsBox/Influence"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 20
+text = "0"
+vertical_alignment = 1
+
+[node name="Resources" type="HBoxContainer" parent="Margin/VBox/StatePanel/StatsBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Margin/VBox/StatePanel/StatsBox/Resources"]
+layout_mode = 2
+custom_minimum_size = Vector2(28, 28)
+texture = ExtResource("4_res")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="Value" type="Label" parent="Margin/VBox/StatePanel/StatsBox/Resources"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 20
+text = "0"
+vertical_alignment = 1
+
+[node name="Crisis" type="HBoxContainer" parent="Margin/VBox/StatePanel/StatsBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Margin/VBox/StatePanel/StatsBox/Crisis"]
+layout_mode = 2
+custom_minimum_size = Vector2(28, 28)
+texture = ExtResource("6_crisis")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="Value" type="Label" parent="Margin/VBox/StatePanel/StatsBox/Crisis"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 20
+text = "0"
+vertical_alignment = 1
+
+[node name="Control" type="HBoxContainer" parent="Margin/VBox/StatePanel/StatsBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Margin/VBox/StatePanel/StatsBox/Control"]
+layout_mode = 2
+custom_minimum_size = Vector2(28, 28)
+texture = ExtResource("7_ctrl")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="Value" type="Label" parent="Margin/VBox/StatePanel/StatsBox/Control"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 20
+text = "0 / 0"
+vertical_alignment = 1
 
 [node name="EventPanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
@@ -72,10 +172,24 @@ size_flags_vertical = 3
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="EventTitle" type="Label" parent="Margin/VBox/EventPanel/EventVBox"]
+[node name="EventHeader" type="HBoxContainer" parent="Margin/VBox/EventPanel/EventVBox"]
 layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="EventIcon" type="TextureRect" parent="Margin/VBox/EventPanel/EventVBox/EventHeader"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 48)
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
+
+[node name="EventTitle" type="Label" parent="Margin/VBox/EventPanel/EventVBox/EventHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 theme_override_font_sizes/font_size = 26
 text = "Event Title"
+vertical_alignment = 1
 
 [node name="EventDescription" type="Label" parent="Margin/VBox/EventPanel/EventVBox"]
 layout_mode = 2

@@ -7,14 +7,38 @@ const CampaignManagerClass = preload("res://scripts/systems/campaign_manager.gd"
 const MetricsTrackerClass = preload("res://scripts/systems/metrics_tracker.gd")
 const SessionBridgeClass = preload("res://scripts/systems/session_bridge.gd")
 const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd")
+const LOSS_ALERT_VOLUME_DB: float = -9.0
 
 @onready var turn_label: Label = $Margin/VBox/Header/TurnLabel
 @onready var chapter_label: Label = $Margin/VBox/Header/ChapterLabel
 @onready var region_map: Control = $Margin/VBox/RegionMap
-@onready var stats_label: Label = $Margin/VBox/StatePanel/StatsLabel
-@onready var event_title_label: Label = $Margin/VBox/EventPanel/EventVBox/EventTitle
+@onready var stat_stability: Label = $Margin/VBox/StatePanel/StatsBox/Stability/Value
+@onready var stat_influence: Label = $Margin/VBox/StatePanel/StatsBox/Influence/Value
+@onready var stat_resources: Label = $Margin/VBox/StatePanel/StatsBox/Resources/Value
+@onready var stat_crisis: Label = $Margin/VBox/StatePanel/StatsBox/Crisis/Value
+@onready var stat_control: Label = $Margin/VBox/StatePanel/StatsBox/Control/Value
+@onready var event_icon: TextureRect = $Margin/VBox/EventPanel/EventVBox/EventHeader/EventIcon
+@onready var event_title_label: Label = $Margin/VBox/EventPanel/EventVBox/EventHeader/EventTitle
 @onready var event_description_label: Label = $Margin/VBox/EventPanel/EventVBox/EventDescription
 @onready var choices_container: VBoxContainer = $Margin/VBox/EventPanel/EventVBox/Choices
+
+# Maps each event id (from data/events.json) to its event icon path.
+# Icons are optional; missing resources fall back to text-only header.
+const EVENT_ICON_PATH_BY_ID: Dictionary = {
+	"food_shortage": "res://assets/art/events/event_famine.png",
+	"border_uprising": "res://assets/art/events/event_uprising.png",
+	"info_leak": "res://assets/art/events/event_espionage.png",
+	"pandemic_wave": "res://assets/art/events/event_outbreak.png",
+	"golden_opportunity": "res://assets/art/events/event_opportunity.png",
+	"outbreak_focus": "res://assets/art/events/event_outbreak.png",
+	"frontier_uprising": "res://assets/art/events/event_uprising.png",
+	"defector_cell": "res://assets/art/events/event_espionage.png",
+	"relief_mission": "res://assets/art/events/event_relief.png",
+	"sabotage_strike": "res://assets/art/events/event_sabotage.png",
+	"cure_trial": "res://assets/art/events/event_science.png",
+	"mass_migration": "res://assets/art/events/event_migration.png",
+}
+const EVENT_ICON_FALLBACK_PATH: String = "res://assets/art/events/event_outbreak.png"
 @onready var progress_label: Label = $Margin/VBox/Footer/ProgressLabel
 @onready var back_button: Button = $Margin/VBox/Footer/BackButton
 
@@ -38,6 +62,10 @@ var decisions_this_turn: int = 0
 # True while the active event is waiting for the player to click a region
 # before choices become selectable.
 var _awaiting_region_pick: bool = false
+var _controlled_regions_prev: Dictionary = {}
+var _loss_audio_player: AudioStreamPlayer = null
+var _loss_audio_stream: AudioStreamGenerator = null
+var _event_icon_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -62,6 +90,8 @@ func _ready() -> void:
 	event_director.initialize(events_data)
 	world_simulation.initialize(config, meta_progression.get_run_modifiers(), region_defs)
 	metrics_tracker.start_run()
+	_setup_loss_audio()
+	_control_snapshot_sync()
 
 	if region_map.has_method("build_from_snapshot"):
 		region_map.build_from_snapshot(world_simulation.regions_snapshot())
@@ -93,14 +123,22 @@ func _render_state() -> void:
 	turn_label.text = "Turn %d / %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
 	var s: Dictionary = world_simulation.world_state
 	var target: int = int(config.get("win_conditions", {}).get("target_control_regions", 7))
-	stats_label.text = "Stability: %d   Influence: %d   Resources: %d   Crisis: %d   Regions: %d / %d" % [
-		int(s.get("stability", 0)),
-		int(s.get("influence", 0)),
-		int(s.get("resources", 0)),
-		int(s.get("crisis", 0)),
-		int(s.get("control_regions", 0)),
-		target
-	]
+
+	stat_stability.text = str(int(s.get("stability", 0)))
+	stat_influence.text = str(int(s.get("influence", 0)))
+	stat_resources.text = str(int(s.get("resources", 0)))
+	stat_crisis.text = str(int(s.get("crisis", 0)))
+	stat_control.text = "%d / %d" % [int(s.get("control_regions", 0)), target]
+
+	# Tint crisis value red when it's climbing to warn the player.
+	var crisis: int = int(s.get("crisis", 0))
+	var crisis_col: Color = Color(0.910, 0.831, 0.706, 1.0) # C4 cream
+	if crisis >= 50:
+		crisis_col = Color(0.851, 0.329, 0.306, 1.0)        # R4 wound red
+	elif crisis >= 30:
+		crisis_col = Color(0.780, 0.604, 0.235, 1.0)        # O3 signature gold
+	stat_crisis.add_theme_color_override("font_color", crisis_col)
+
 	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
 	_refresh_region_map()
 
@@ -132,6 +170,7 @@ func _render_current_event() -> void:
 	var display_placeholder: Dictionary = { "name": "the chosen region", "short": "the region" }
 	event_title_label.text = _display_text(String(event_data.get("title", "Unknown Event")), pending_pick, display_placeholder)
 	event_description_label.text = _display_text(String(event_data.get("description", "No description.")), pending_pick, display_placeholder)
+	_assign_event_icon(event_data)
 
 	var profile: Dictionary = platform_profile.current_profile()
 	var min_size: Vector2i = profile.get("button_min_size", Vector2i(220, 54))
@@ -176,6 +215,13 @@ func _end_region_pick_mode() -> void:
 		region_map.clear_selectable()
 
 
+func _assign_event_icon(event_data: Dictionary) -> void:
+	var id: String = String(event_data.get("id", ""))
+	var path: String = String(EVENT_ICON_PATH_BY_ID.get(id, EVENT_ICON_FALLBACK_PATH))
+	event_icon.texture = _safe_load_texture(path)
+	event_icon.visible = event_icon.texture != null
+
+
 func _display_text(source: String, clean_placeholders: bool, fallback: Dictionary) -> String:
 	if not clean_placeholders:
 		return source
@@ -213,6 +259,7 @@ func _on_choice_selected(choice: Dictionary) -> void:
 	if not adjacent_effects.is_empty() and target_id != "":
 		world_simulation.apply_effects_adjacent(target_id, adjacent_effects)
 
+	_emit_control_loss_feedback()
 	current_event_index += 1
 	_render_current_event()
 
@@ -251,6 +298,7 @@ func _on_region_clicked(region_id: String) -> void:
 
 func _finalize_turn() -> void:
 	world_simulation.apply_passive_turn_effects(meta_progression.get_run_modifiers())
+	_emit_control_loss_feedback()
 	world_simulation.advance_turn()
 	_refresh_region_map()
 	var evaluation: Dictionary = world_simulation.evaluate_outcome()
@@ -298,6 +346,87 @@ func _finish_run(evaluation: Dictionary) -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+
+
+func _control_snapshot_sync() -> void:
+	_controlled_regions_prev.clear()
+	for id in world_simulation.controlled_region_ids():
+		_controlled_regions_prev[String(id)] = true
+
+
+func _emit_control_loss_feedback() -> void:
+	var current: Dictionary = {}
+	for id in world_simulation.controlled_region_ids():
+		current[String(id)] = true
+
+	var lost: Array = []
+	for id in _controlled_regions_prev.keys():
+		if not current.has(id):
+			lost.append(String(id))
+
+	if not lost.is_empty():
+		for rid in lost:
+			if region_map.has_method("flash_region_loss"):
+				region_map.flash_region_loss(rid)
+		_play_loss_alert()
+		var label: String = _region_name(lost[0])
+		progress_label.text = "Region lost: %s%s" % [
+			label,
+			(" (+%d)" % (lost.size() - 1)) if lost.size() > 1 else ""
+		]
+
+	_controlled_regions_prev = current
+
+
+func _region_name(region_id: String) -> String:
+	var region: Dictionary = world_simulation.region_grid.get_region(region_id)
+	return String(region.get("short", region_id))
+
+
+func _setup_loss_audio() -> void:
+	_loss_audio_player = AudioStreamPlayer.new()
+	_loss_audio_stream = AudioStreamGenerator.new()
+	_loss_audio_stream.mix_rate = 22050.0
+	_loss_audio_stream.buffer_length = 0.25
+	_loss_audio_player.stream = _loss_audio_stream
+	_loss_audio_player.volume_db = LOSS_ALERT_VOLUME_DB
+	add_child(_loss_audio_player)
+
+
+func _play_loss_alert() -> void:
+	if _loss_audio_player == null or _loss_audio_stream == null:
+		return
+	if not _loss_audio_player.playing:
+		_loss_audio_player.play()
+	var playback: AudioStreamGeneratorPlayback = _loss_audio_player.get_stream_playback()
+	if playback == null:
+		return
+
+	var total_frames: int = min(3200, playback.get_frames_available())
+	if total_frames <= 0:
+		return
+	var mix_rate: float = _loss_audio_stream.mix_rate
+	for i in range(total_frames):
+		var t: float = float(i) / float(total_frames)
+		var freq: float = lerpf(560.0, 320.0, t)
+		var phase: float = TAU * freq * (float(i) / mix_rate)
+		var env: float = (1.0 - t) * (1.0 - t)
+		var sample: float = sin(phase) * 0.28 * env
+		playback.push_frame(Vector2(sample, sample))
+
+
+func _safe_load_texture(path: String) -> Texture2D:
+	if path.is_empty():
+		return null
+	if _event_icon_cache.has(path):
+		return _event_icon_cache[path]
+	if not ResourceLoader.exists(path):
+		_event_icon_cache[path] = null
+		return null
+	var res: Resource = ResourceLoader.load(path)
+	var tex: Texture2D = res as Texture2D
+	_event_icon_cache[path] = tex
+	return tex
 
 
 func _load_json_dict(path: String) -> Dictionary:
