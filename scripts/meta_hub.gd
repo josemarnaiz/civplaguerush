@@ -5,7 +5,7 @@ const SessionBridgeClass = preload("res://scripts/systems/session_bridge.gd")
 const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd")
 
 @onready var summary_label: Label = $Margin/VBox/SummaryLabel
-@onready var credits_label: Label = $Margin/VBox/CreditsLabel
+@onready var credits_label: Label = $Margin/VBox/Header/CreditsBadge/CreditsLabel
 @onready var techs_container: VBoxContainer = $Margin/VBox/TechsPanel/TechsList
 @onready var play_again_button: Button = $Margin/VBox/Actions/PlayAgainButton
 @onready var main_menu_button: Button = $Margin/VBox/Actions/MainMenuButton

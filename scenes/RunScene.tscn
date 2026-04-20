@@ -32,34 +32,39 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 40.0
-offset_top = 30.0
+offset_top = 16.0
 offset_right = -40.0
-offset_bottom = -30.0
+offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 2
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 10
 
-[node name="Header" type="VBoxContainer" parent="Margin/VBox"]
+[node name="Header" type="HBoxContainer" parent="Margin/VBox"]
 layout_mode = 2
+theme_override_constants/separation = 24
 
 [node name="TurnLabel" type="Label" parent="Margin/VBox/Header"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 22
 text = "Turn"
 
 [node name="ChapterLabel" type="Label" parent="Margin/VBox/Header"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 2
+vertical_alignment = 1
 text = "Chapter"
 
 [node name="RegionMap" parent="Margin/VBox" instance=ExtResource("2_rgmap")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
-custom_minimum_size = Vector2(0, 280)
+custom_minimum_size = Vector2(0, 200)
 
 [node name="StatePanel" type="PanelContainer" parent="Margin/VBox"]
 layout_mode = 2
@@ -178,7 +183,7 @@ theme_override_constants/separation = 14
 
 [node name="EventIcon" type="TextureRect" parent="Margin/VBox/EventPanel/EventVBox/EventHeader"]
 layout_mode = 2
-custom_minimum_size = Vector2(48, 48)
+custom_minimum_size = Vector2(40, 40)
 expand_mode = 1
 stretch_mode = 5
 texture_filter = 1

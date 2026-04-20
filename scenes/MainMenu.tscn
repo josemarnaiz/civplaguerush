@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_mmenu"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/title_logo.png" id="2_title"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/divider_horizontal.png" id="3_div"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -34,38 +36,86 @@ grow_vertical = 2
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 18
+alignment = 1
 
 [node name="Title" type="Label" parent="Margin/VBox"]
+visible = false
 layout_mode = 2
-theme_override_font_sizes/font_size = 56
 text = "CivPlagueRush"
+
+[node name="TitleRow" type="CenterContainer" parent="Margin/VBox"]
+layout_mode = 2
+
+[node name="Title" type="TextureRect" parent="Margin/VBox/TitleRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(720, 160)
+texture = ExtResource("2_title")
+expand_mode = 1
+stretch_mode = 5
+texture_filter = 1
 
 [node name="SubTitle" type="Label" parent="Margin/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
 autowrap_mode = 2
 text = "Run-based strategy game"
 
-[node name="ChapterIntro" type="Label" parent="Margin/VBox"]
+[node name="Divider" type="TextureRect" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(480, 8)
+texture = ExtResource("3_div")
+expand_mode = 1
+stretch_mode = 1
+texture_filter = 1
+
+[node name="ChapterPanel" type="PanelContainer" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ChapterMargin" type="MarginContainer" parent="Margin/VBox/ChapterPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="ChapterIntro" type="Label" parent="Margin/VBox/ChapterPanel/ChapterMargin"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+vertical_alignment = 1
 autowrap_mode = 2
 text = "Chapter intro goes here."
+
+[node name="Divider2" type="TextureRect" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(480, 8)
+texture = ExtResource("3_div")
+expand_mode = 1
+stretch_mode = 1
+texture_filter = 1
 
 [node name="Actions" type="HBoxContainer" parent="Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 16
+alignment = 1
 
 [node name="StartRunButton" type="Button" parent="Margin/VBox/Actions"]
 layout_mode = 2
+custom_minimum_size = Vector2(220, 54)
 text = "Start Run"
 
 [node name="MetaButton" type="Button" parent="Margin/VBox/Actions"]
 layout_mode = 2
+custom_minimum_size = Vector2(220, 54)
 text = "Meta Hub"
 
 [node name="QuitButton" type="Button" parent="Margin/VBox/Actions"]
 layout_mode = 2
+custom_minimum_size = Vector2(220, 54)
 text = "Quit"

@@ -60,7 +60,9 @@ const BIOME_TEXTURE_PATHS: Dictionary = {
 }
 const INFECTION_TEX_PATH: String = "res://assets/art/map/infection_noise.png"
 const PLAGUE_SIGIL_PATH: String = "res://assets/art/map/plague_sigil.png"
+const COMPASS_ROSE_PATH: String = "res://assets/art/map/compass_rose.png"
 const INFECTION_TILE_SIZE: float = 32.0
+const COMPASS_SIZE: float = 56.0
 
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)
@@ -77,6 +79,7 @@ var _lost_flash_until: Dictionary = {} # id -> time seconds
 var _biome_textures: Dictionary = {}   # biome id -> Texture2D
 var _infection_tex: Texture2D = null
 var _plague_sigil: Texture2D = null
+var _compass_rose: Texture2D = null
 var _time: float = 0.0
 
 
@@ -423,7 +426,13 @@ func _draw() -> void:
 		draw_circle(c, 5.0, Color(0.059, 0.039, 0.055, 0.85))
 		_draw_star(c, 4.2, STAR_COLOR)
 
-	# Pass 6: tooltip for the hovered region (after a short delay).
+	# Pass 6: decorative compass rose in the bottom-right corner of the map.
+	if _compass_rose != null:
+		var rose_pos: Vector2 = Vector2(s.x - COMPASS_SIZE - 10.0, s.y - COMPASS_SIZE - 10.0)
+		var rose_rect := Rect2(rose_pos, Vector2(COMPASS_SIZE, COMPASS_SIZE))
+		draw_texture_rect(_compass_rose, rose_rect, false, Color(1, 1, 1, 0.82))
+
+	# Pass 7: tooltip for the hovered region (after a short delay).
 	_draw_hover_tooltip(s)
 
 
@@ -527,6 +536,7 @@ func _load_optional_textures() -> void:
 			_biome_textures[String(key)] = tex
 	_infection_tex = _safe_load_texture(INFECTION_TEX_PATH)
 	_plague_sigil = _safe_load_texture(PLAGUE_SIGIL_PATH)
+	_compass_rose = _safe_load_texture(COMPASS_ROSE_PATH)
 
 
 func _safe_load_texture(path: String) -> Texture2D:
