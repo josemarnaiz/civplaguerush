@@ -29,3 +29,7 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# Python tooling (art generators)
+__pycache__/
+*.pyc
