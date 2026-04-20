@@ -85,6 +85,23 @@ func apply_regional_effect(region_id: String, effect: Dictionary) -> void:
 	_recompute_derived()
 
 
+# Phase 2: apply a choice's regional payload to the resolved target region.
+# Accepts the same keys as apply_regional_effect (influence, infection, stability).
+func apply_effects_regional(target_id: String, effects: Dictionary) -> void:
+	if target_id.is_empty() or effects.is_empty():
+		return
+	region_grid.apply_regional_effect(target_id, effects)
+	_recompute_derived()
+
+
+# Phase 2: apply a choice's adjacent payload to every neighbor of the target.
+func apply_effects_adjacent(target_id: String, effects: Dictionary) -> void:
+	if target_id.is_empty() or effects.is_empty():
+		return
+	region_grid.apply_adjacent_effect(target_id, effects)
+	_recompute_derived()
+
+
 func apply_passive_turn_effects(meta_modifiers: Dictionary) -> void:
 	world_state["resources"] = clampi(int(world_state["resources"]) + int(meta_modifiers.get("resources_per_turn", 0)), 0, 100)
 

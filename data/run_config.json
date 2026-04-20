@@ -13,8 +13,8 @@
     "control_regions": 2
   },
   "win_conditions": {
-    "target_control_regions": 8,
-    "max_crisis_for_win": 60
+    "target_control_regions": 7,
+    "max_crisis_for_win": 50
   },
   "lose_conditions": {
     "stability_below": 10,
