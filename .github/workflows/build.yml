@@ -129,8 +129,12 @@ jobs:
       - name: Smoke-test Godot binary
         shell: pwsh
         run: |
-          & $env:GODOT_PATH --version
-          if ($LASTEXITCODE -ne 0) { throw "Godot --version failed with $LASTEXITCODE" }
+          # The non-console Windows build detaches its stdout, so --version may
+          # return without a proper exit code via '&'. Use Start-Process -Wait
+          # so PowerShell sees the real exit status.
+          $p = Start-Process -FilePath $env:GODOT_PATH -ArgumentList "--version" -NoNewWindow -Wait -PassThru
+          Write-Host "Godot --version exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "Godot --version failed with $($p.ExitCode)" }
 
       - name: Install export templates
         if: steps.tpl-cache-win.outputs.cache-hit != 'true'

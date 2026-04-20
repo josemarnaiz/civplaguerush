@@ -52,6 +52,19 @@ function Count-CtexFiles {
     return (Get-ChildItem -LiteralPath $importedDir -Filter "*.ctex" -ErrorAction SilentlyContinue | Measure-Object).Count
 }
 
+function Invoke-Godot {
+    # The non-console Godot Windows build detaches from the parent console and
+    # returns control to the shell before actually finishing. Running it via
+    # Start-Process -Wait forces PowerShell to block until the worker process
+    # exits, so we can rely on Test-Path for the output file afterwards.
+    param(
+        [string]$Godot,
+        [string[]]$Arguments
+    )
+    $p = Start-Process -FilePath $Godot -ArgumentList $Arguments -NoNewWindow -Wait -PassThru
+    return $p.ExitCode
+}
+
 function Ensure-Imported {
     param([string]$Godot)
 
@@ -61,9 +74,9 @@ function Ensure-Imported {
     Write-Host "--- Importing project (cold cache) ---"
     for ($i = 1; $i -le 3; $i++) {
         Write-Host ("Import pass {0}..." -f $i)
-        & $Godot --headless --path $projectRoot --import --quit
+        $code = Invoke-Godot -Godot $Godot -Arguments @("--headless", "--path", $projectRoot, "--import", "--quit")
         $count = Count-CtexFiles
-        Write-Host ("After pass {0}: {1} .ctex files" -f $i, $count)
+        Write-Host ("After pass {0}: exit={1} ctex={2}" -f $i, $code, $count)
         if ($count -ge $expected) { return }
     }
     Write-Host "Warning: only $(Count-CtexFiles) .ctex files generated; export may still fail."
@@ -85,8 +98,7 @@ function Run-Export {
     $modeFlag = if ($Release) { "--export-release" } else { "--export-debug" }
     Write-Host ("--- Exporting {0} ({1}) -> {2} ---" -f $PresetName, $modeFlag, $absOut)
 
-    & $Godot --headless --path $projectRoot --verbose $modeFlag $PresetName $absOut
-    $exit = $LASTEXITCODE
+    $exit = Invoke-Godot -Godot $Godot -Arguments @("--headless", "--path", $projectRoot, "--verbose", $modeFlag, $PresetName, $absOut)
     Write-Host ("Godot exited with code {0}" -f $exit)
     if ($exit -ne 0) {
         throw "Export failed for preset '$PresetName' (exit $exit)"
