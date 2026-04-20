@@ -8,27 +8,55 @@ const COL_COUNT: int = 4
 const ROW_COUNT: int = 3
 const VERT_COUNT: int = 11
 
-const OCEAN_COLOR: Color = Color(0.045, 0.075, 0.125)
-const OCEAN_GLOW: Color = Color(0.08, 0.14, 0.22, 0.55)
-const LAND_RIVAL: Color = Color(0.42, 0.18, 0.22)
-const LAND_NEUTRAL: Color = Color(0.36, 0.38, 0.32)
-const LAND_PLAYER: Color = Color(0.26, 0.62, 0.36)
-const INFECTION_COLOR: Color = Color(0.95, 0.16, 0.13)
-const EDGE_COLOR: Color = Color(0.60, 0.78, 0.92, 0.45)
-const BORDER_COLOR: Color = Color(0.05, 0.08, 0.11, 0.95)
-const RING_CONTROLLED: Color = Color(0.60, 1.00, 0.65, 0.9)
-const RING_SELECTABLE: Color = Color(1.00, 0.88, 0.28, 1.0)
-const RING_ACTIVE_TARGET: Color = Color(1.00, 0.78, 0.24, 1.0)   # gold O3 from Ashen Fresco
-const RING_HOVER: Color = Color(1, 1, 1, 0.45)
-const SHADOW_COLOR: Color = Color(0, 0, 0, 0.42)
-const STAR_COLOR: Color = Color(0.25, 0.85, 1.0, 0.9)
-const TOOLTIP_BG: Color = Color(0.05, 0.08, 0.11, 0.93)
-const TOOLTIP_BORDER: Color = Color(0.78, 0.60, 0.24, 0.95)
-const TOOLTIP_TITLE: Color = Color(0.96, 0.90, 0.68, 1.0)
-const TOOLTIP_TEXT: Color = Color(0.88, 0.85, 0.80, 1.0)
+# Ashen Fresco palette — see docs/ART_bible.md.
+# Colors map to: D1 (background), D2 (shadow), B1 (ocean deep), R2 (rival),
+# C1 (neutral stone), G2 (player olive), R4 (infection), O3 (gold signature).
+const OCEAN_COLOR: Color = Color(0.122, 0.082, 0.125)          # D1 sepulcher (matches scene bg)
+const OCEAN_GLOW: Color = Color(0.235, 0.290, 0.333, 0.45)     # B1 slate flecks
+const LAND_RIVAL: Color = Color(0.478, 0.102, 0.141)           # R2 oxblood
+const LAND_NEUTRAL: Color = Color(0.478, 0.396, 0.376)         # C1 aged stone
+const LAND_PLAYER: Color = Color(0.420, 0.541, 0.235)          # G2 sickly olive (player power)
+const INFECTION_COLOR: Color = Color(0.851, 0.329, 0.306)      # R4 wound red
+const EDGE_COLOR: Color = Color(0.780, 0.604, 0.235, 0.55)     # O3 gold, dashed contagion
+const BORDER_COLOR: Color = Color(0.059, 0.039, 0.055, 0.98)   # D0 outline
+const RING_CONTROLLED: Color = Color(0.910, 0.753, 0.407, 1.0) # O4 gold highlight
+const RING_SELECTABLE: Color = Color(0.969, 0.902, 0.659, 1.0) # O5 sheen
+const RING_ACTIVE_TARGET: Color = Color(0.780, 0.604, 0.235, 1.0) # O3 signature
+const RING_HOVER: Color = Color(0.910, 0.831, 0.706, 0.65)     # C4 cream glow
+const SHADOW_COLOR: Color = Color(0.059, 0.039, 0.055, 0.55)   # D0 soft shadow
+const STAR_COLOR: Color = Color(0.969, 0.902, 0.659, 0.95)     # O5 sheen star
+const TOOLTIP_BG: Color = Color(0.122, 0.082, 0.125, 0.96)     # D1 deep
+const TOOLTIP_BORDER: Color = Color(0.780, 0.604, 0.235, 1.0)  # O3 gold
+const TOOLTIP_TITLE: Color = Color(0.969, 0.902, 0.659, 1.0)   # O5 sheen
+const TOOLTIP_TEXT: Color = Color(0.910, 0.831, 0.706, 1.0)    # C4 cream
 
 const TWEEN_SPEED: float = 6.5          # higher = snappier approach of display values
 const TOOLTIP_DELAY: float = 0.35       # seconds hovering before tooltip shows
+const BIOME_ICON_SIZE: float = 22.0     # drawn size of biome icon above region label
+
+# Region id -> biome archetype. Texture path is assets/art/map/biome_<arch>.png.
+# Keep in sync with tools/art_gen/gen_biomes.py.
+const BIOME_BY_REGION: Dictionary = {
+	"r01": "arcology",  "r02": "coast",     "r03": "wasteland",
+	"r04": "tundra",    "r05": "factory",   "r06": "tech",
+	"r07": "ruins",     "r08": "veil",      "r09": "drylands",
+	"r10": "islands",   "r11": "jungle",    "r12": "volcano",
+}
+
+const BIOME_TEXTURES: Dictionary = {
+	"arcology": preload("res://assets/art/map/biome_arcology.png"),
+	"coast": preload("res://assets/art/map/biome_coast.png"),
+	"wasteland": preload("res://assets/art/map/biome_wasteland.png"),
+	"tundra": preload("res://assets/art/map/biome_tundra.png"),
+	"factory": preload("res://assets/art/map/biome_factory.png"),
+	"tech": preload("res://assets/art/map/biome_tech.png"),
+	"ruins": preload("res://assets/art/map/biome_ruins.png"),
+	"veil": preload("res://assets/art/map/biome_veil.png"),
+	"drylands": preload("res://assets/art/map/biome_drylands.png"),
+	"islands": preload("res://assets/art/map/biome_islands.png"),
+	"jungle": preload("res://assets/art/map/biome_jungle.png"),
+	"volcano": preload("res://assets/art/map/biome_volcano.png"),
+}
 
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)

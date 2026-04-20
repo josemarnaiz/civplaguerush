@@ -1,0 +1,35 @@
+"""Master generator — regenerates every art asset from source.
+
+Run:  python tools/art_gen/build_all.py
+
+Equivalent to running each gen_*.py in order.
+"""
+from __future__ import annotations
+
+import gen_palette
+import gen_panel
+import gen_buttons
+import gen_icons
+import gen_decor
+import gen_preview
+
+
+def main() -> None:
+    print("== palette ==")
+    gen_palette.generate()
+    print("== panels ==")
+    for v in ("light", "dark"):
+        gen_panel.generate(v)
+    print("== buttons ==")
+    gen_buttons.generate_all()
+    print("== icons ==")
+    gen_icons.generate()
+    print("== decor ==")
+    gen_decor.generate()
+    print("== preview ==")
+    gen_preview.build_preview()
+    print("\nAll art regenerated.")
+
+
+if __name__ == "__main__":
+    main()

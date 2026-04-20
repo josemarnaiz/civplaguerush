@@ -69,17 +69,16 @@ def build_preview() -> Path:
     canvas.paste(panel_light, (16, 24), panel_light)
     canvas.paste(panel_dark, (220, 24), panel_dark)
 
-    # Icons row — each icon in a small dark panel with a stat bar
+    # Icons row — each icon in a small badge frame
     icon_names = ["stat_influence.png", "stat_resources.png", "stat_crisis.png",
                   "stat_stability.png", "stat_control.png"]
-    labels = ["INF", "RES", "CRS", "STB", "CTR"]
     icon_y = 120
-    for i, (iname, label) in enumerate(zip(icon_names, labels)):
+    for i, iname in enumerate(icon_names):
         x = 16 + i * 80
-        bg = _stretch_9slice(_load("ui", "panel_frame_dark.png"), 70, 40, 16)
+        bg = _load("ui", "badge_frame_dark.png")
         canvas.paste(bg, (x, icon_y), bg)
         icon = _load("icons", iname)
-        canvas.paste(icon, (x + 4, icon_y + 4), icon)
+        canvas.paste(icon, (x + 8, icon_y + 8), icon)
 
     # Buttons row — stretched
     btn_y = 180
@@ -88,11 +87,23 @@ def build_preview() -> Path:
         btn = _stretch_9slice(_load("ui", name), 96, 28, 12)
         canvas.paste(btn, (16 + i * 100, btn_y), btn)
 
-    # Larger stretched button (dialog action)
-    big = _stretch_9slice(_load("ui", "button_normal.png"), 200, 32, 12)
-    canvas.paste(big, (16, 220), big)
-    big2 = _stretch_9slice(_load("ui", "button_hover.png"), 200, 32, 12)
-    canvas.paste(big2, (220, 220), big2)
+    # Divider: 3-slice horizontally (stretch middle, keep ends as-is)
+    div_src = _load("ui", "divider_horizontal.png")
+    target_w, s = 300, 12
+    divider = Image.new("RGBA", (target_w, div_src.height), (0, 0, 0, 0))
+    divider.paste(div_src.crop((0, 0, s, div_src.height)), (0, 0))
+    mid_src = div_src.crop((s, 0, div_src.width - s, div_src.height))
+    mid_target_w = target_w - 2 * s
+    divider.paste(mid_src.resize((mid_target_w, div_src.height), Image.NEAREST), (s, 0))
+    divider.paste(div_src.crop((div_src.width - s, 0, div_src.width, div_src.height)),
+                  (target_w - s, 0))
+    canvas.paste(divider, (60, 214), divider)
+
+    # Big stretched buttons at bottom
+    big = _stretch_9slice(_load("ui", "button_normal.png"), 180, 32, 12)
+    canvas.paste(big, (30, 228), big)
+    big2 = _stretch_9slice(_load("ui", "button_hover.png"), 180, 32, 12)
+    canvas.paste(big2, (220, 228), big2)
 
     final = _scale(canvas, ZOOM)
     final.save(OUT)
