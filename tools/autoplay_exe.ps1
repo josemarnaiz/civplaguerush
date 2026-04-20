@@ -101,7 +101,32 @@ try {
     Start-Sleep -Milliseconds 500
     Save-Screenshot -Client $client -Name "01_run_started"
 
+    $pickEval = @"
+var scene = get_tree().current_scene
+if not scene.has_method('_begin_region_pick_mode'):
+`treturn {ok=false}
+if not scene._awaiting_region_pick:
+`treturn {ok=false}
+var rm = scene.region_map
+var ids = rm._selectable_ids.keys()
+if ids.is_empty():
+`treturn {ok=false}
+var id = String(ids[0])
+var c = rm._centroids.get(id, Vector2.ZERO)
+var p = c * rm.size + rm.global_position
+return {ok=true, id=id, x=int(p.x), y=int(p.y)}
+"@
+
     for ($i = 1; $i -le $Turns; $i++) {
+        # Check pick mode before anything else; in player_chooses events the
+        # choice buttons are visible but disabled, so clicking them is a no-op.
+        $pick = Invoke-McpCommand -Client $client -Command "eval" -Params @{ code = $pickEval }
+        if ($pick -and $pick.result -and $pick.result.ok) {
+            Write-Host "turn $i : region pick -> $($pick.result.id) at ($($pick.result.x),$($pick.result.y))"
+            [void](Invoke-McpCommand -Client $client -Command "click" -Params @{ x = $pick.result.x; y = $pick.result.y })
+            Start-Sleep -Milliseconds 350
+        }
+
         $ui = Invoke-McpCommand -Client $client -Command "get_ui_elements"
         # Choice buttons are created dynamically inside the Choices VBoxContainer
         # and get auto-generated names, so match by path instead.
@@ -118,18 +143,6 @@ try {
         Write-Host "turn $i : clicking $($target.name) at ($cx,$cy)"
         [void](Invoke-McpCommand -Client $client -Command "click" -Params @{ x = $cx; y = $cy })
         Start-Sleep -Milliseconds 350
-
-        # If we ended up in a region pick mode (player_chooses event), the choice
-        # buttons are disabled and the map waits for a region click. Resolve it
-        # by clicking the centroid of the first selectable region.
-        $pick = Invoke-McpCommand -Client $client -Command "eval" -Params @{
-            code = "var scene = get_tree().current_scene; if not scene.has_method('_begin_region_pick_mode'): return {ok=false}; if not scene._awaiting_region_pick: return {ok=false}; var rm = scene.region_map; var ids = rm._selectable_ids.keys(); if ids.is_empty(): return {ok=false}; var id = String(ids[0]); var c = rm._centroids.get(id, Vector2.ZERO); var p = c * rm.size + rm.global_position; return {ok=true, id=id, x=int(p.x), y=int(p.y)}"
-        }
-        if ($pick -and $pick.result -and $pick.result.ok) {
-            Write-Host "  region pick -> $($pick.result.id) at ($($pick.result.x),$($pick.result.y))"
-            [void](Invoke-McpCommand -Client $client -Command "click" -Params @{ x = $pick.result.x; y = $pick.result.y })
-            Start-Sleep -Milliseconds 350
-        }
 
         Save-Screenshot -Client $client -Name ("{0:D2}_turn_{1:D2}" -f ($i + 1), $i)
     }

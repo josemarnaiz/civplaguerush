@@ -8,6 +8,8 @@ export.cfg
 # Build artifacts
 build/
 exports/
+# Keep the .godotignore marker so Godot never scans build/ for imports.
+!build/.godotignore
 
 # Runtime logs
 run_log.txt

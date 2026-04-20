@@ -124,13 +124,19 @@ func _render_current_event() -> void:
 	var event_data: Dictionary = current_turn_events[current_event_index]
 	var kind: String = String(event_data.get("_kind", "global"))
 
-	event_title_label.text = String(event_data.get("title", "Unknown Event"))
-	event_description_label.text = String(event_data.get("description", "No description."))
+	# For player_chooses events we don't know the region yet, so replace the
+	# remaining {region.*} placeholders with neutral copy for display only.
+	# The raw event_data keeps the templates intact so _on_region_clicked can
+	# still format them against the real region once the player picks.
+	var pending_pick: bool = (kind == "player_chooses")
+	var display_placeholder: Dictionary = { "name": "the chosen region", "short": "the region" }
+	event_title_label.text = _display_text(String(event_data.get("title", "Unknown Event")), pending_pick, display_placeholder)
+	event_description_label.text = _display_text(String(event_data.get("description", "No description.")), pending_pick, display_placeholder)
 
 	var profile: Dictionary = platform_profile.current_profile()
 	var min_size: Vector2i = profile.get("button_min_size", Vector2i(220, 54))
 
-	if kind == "player_chooses":
+	if pending_pick:
 		_begin_region_pick_mode(event_data)
 	else:
 		_end_region_pick_mode()
@@ -139,7 +145,7 @@ func _render_current_event() -> void:
 
 	for choice in event_data.get("choices", []):
 		var button := Button.new()
-		button.text = String(choice.get("label", "Choose"))
+		button.text = _display_text(String(choice.get("label", "Choose")), pending_pick, display_placeholder)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.custom_minimum_size = Vector2(min_size.x, min_size.y)
 		button.disabled = _awaiting_region_pick
@@ -168,6 +174,12 @@ func _end_region_pick_mode() -> void:
 	_awaiting_region_pick = false
 	if region_map.has_method("clear_selectable"):
 		region_map.clear_selectable()
+
+
+func _display_text(source: String, clean_placeholders: bool, fallback: Dictionary) -> String:
+	if not clean_placeholders:
+		return source
+	return event_director.format_text(source, fallback)
 
 
 func _update_active_target(event_data: Dictionary) -> void:
