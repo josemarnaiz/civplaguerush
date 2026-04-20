@@ -117,22 +117,38 @@ assets/art/
 ├── ui/
 │   ├── panel_frame.png          # 9-slice decadente (96×96, margen 16)
 │   ├── panel_frame_dark.png     # Variante oscura
-│   ├── button_normal.png        # 9-slice (64×32, margen 8)
+│   ├── button_normal.png        # 9-slice (96×28, margen 12)
 │   ├── button_hover.png
-│   ├── button_pressed.png
+│   ├── button_pressed.png       # Fill D4 (hundido)
 │   ├── button_disabled.png
-│   ├── divider_horizontal.png   # Divisor decorativo
-│   ├── flourish_corner.png      # Ornamento esquinero
+│   ├── divider_horizontal.png   # 96×8 divisor tiling
+│   ├── flourish_corner.png      # Ornamento esquinero 32×32
+│   ├── badge_frame.png          # 48×48 9-slice (stat badges)
+│   ├── badge_frame_dark.png
+│   ├── title_logo.png           # Logo CIVPLAGUERUSH para MainMenu
+│   ├── header_cartouche.png     # 160×40 marco decorativo (9-slice opc.)
 │   └── ui_theme.tres            # Godot Theme
 ├── icons/
-│   ├── stat_influence.png       # 32×32
-│   ├── stat_resources.png
-│   ├── stat_crisis.png
-│   ├── stat_stability.png
-│   └── stat_control.png
-├── map/                         # (siguiente fase)
-│   ├── region_base_*.png
-│   └── region_overlay_*.png
+│   ├── stat_influence.png       # 32×32 corona con rubí
+│   ├── stat_resources.png       # cáliz
+│   ├── stat_crisis.png          # calavera simétrica
+│   ├── stat_stability.png       # columna jónica
+│   └── stat_control.png         # estandarte
+├── events/                      # 9 iconos 64×64 de eventos
+│   ├── event_outbreak.png
+│   ├── event_famine.png
+│   ├── event_uprising.png
+│   ├── event_espionage.png
+│   ├── event_opportunity.png
+│   ├── event_relief.png
+│   ├── event_sabotage.png
+│   ├── event_science.png
+│   └── event_migration.png
+├── map/
+│   ├── biome_*.png              # 24×24 × 12 biomas
+│   ├── infection_noise.png      # Tile 32×32 de overlay
+│   ├── plague_sigil.png         # Sigilo 16×16 pulsante
+│   └── compass_rose.png         # Brújula art-deco 48×48
 ├── entities/                    # (futuro)
 └── fx/                          # (futuro)
 ```
@@ -171,3 +187,16 @@ Antes de dar un asset por "done":
 ---
 
 *Última revisión: 2026-04-20. Mantenedor: agente de arte.*
+
+---
+
+## 6. Estado de integración (2026-04-20)
+
+| Escena | Elementos art-integrados |
+|--------|--------------------------|
+| MainMenu | `title_logo` (CIVPLAGUERUSH), 2× divisores, `ChapterPanel` con marco dark, botones gold |
+| RunScene | Mapa orgánico con 12 biomas + sigilo de plaga + rosa de los vientos, HUD de 5 badges con icons (columna, corona, cáliz, calavera, estandarte), panel de evento con icon 40×40, footer con `Main Menu` |
+| MetaHub | Título `ASHEN ARCHIVE`, cáliz + créditos, 2× divisores, tech list en panel dark, `Play Again` / `Main Menu` |
+| RegionMap (custom draw) | Polígonos orgánicos tweened, dashed adjacency routes, infection tile overlay, plague sigil pulse, compass rose, biome icons sobre centroides |
+
+**Pipeline generador** (`python tools/art_gen/build_all.py`) regenera toda la galería desde código.
