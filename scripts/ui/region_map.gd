@@ -137,6 +137,52 @@ const OFFSHORE_IDS: Dictionary = { "r10": true }
 const COASTLINE_SAMPLES: int = 144
 const VORONOI_RAYS: int = 80
 
+# Painted cartographic features overlaid on the continent once the Voronoi
+# cells are carved. Mountains run roughly along biome boundaries so they feel
+# geologically motivated; rivers pour from northern highlands to southern
+# deltas echoing Middle-earth's Anduin / Misty Mountains axis.
+const MOUNTAIN_RANGES: Array = [
+	# Northern spine between tundra and factory highlands (Ered Mithrin style).
+	[Vector2(0.40, 0.17), Vector2(0.47, 0.16), Vector2(0.52, 0.19), Vector2(0.58, 0.17)],
+	# Central Misty-Mountains spine separating veil forest from wasteland.
+	[Vector2(0.43, 0.24), Vector2(0.46, 0.32), Vector2(0.48, 0.40), Vector2(0.49, 0.48)],
+	# Eastern Ash Mountains shielding the volcano region.
+	[Vector2(0.66, 0.40), Vector2(0.70, 0.48), Vector2(0.72, 0.56), Vector2(0.70, 0.63)],
+	# Southern Harad-like ridge below drylands.
+	[Vector2(0.39, 0.70), Vector2(0.48, 0.69), Vector2(0.56, 0.70), Vector2(0.64, 0.71)],
+]
+
+# Hand-authored river path (Catmull-Rom smoothed, sine-wobbled at render time).
+const MAIN_RIVER: Array = [
+	Vector2(0.41, 0.09),  # northern headwaters
+	Vector2(0.43, 0.17),
+	Vector2(0.42, 0.26),
+	Vector2(0.40, 0.34),
+	Vector2(0.39, 0.42),
+	Vector2(0.41, 0.50),
+	Vector2(0.44, 0.58),
+	Vector2(0.47, 0.64),
+	Vector2(0.50, 0.70),
+	Vector2(0.50, 0.78),
+	Vector2(0.48, 0.85),  # southern delta
+]
+
+# Tributary river joining the main river from the east.
+const TRIBUTARY: Array = [
+	Vector2(0.78, 0.30),
+	Vector2(0.70, 0.36),
+	Vector2(0.62, 0.42),
+	Vector2(0.54, 0.48),
+	Vector2(0.47, 0.52),
+]
+
+const MOUNTAIN_COLOR_BODY: Color = Color(0.541, 0.467, 0.424, 1.0)   # warm stone (C1 lifted)
+const MOUNTAIN_COLOR_SHADE: Color = Color(0.282, 0.231, 0.247, 1.0)  # D2 deep shade
+const MOUNTAIN_COLOR_SNOW: Color = Color(0.969, 0.918, 0.792, 1.0)   # C5 snow cap
+const MOUNTAIN_COLOR_OUTLINE: Color = Color(0.059, 0.039, 0.055, 0.90)
+const RIVER_COLOR_CORE: Color = Color(0.345, 0.459, 0.592, 0.95)     # brighter slate
+const RIVER_COLOR_HALO: Color = Color(0.576, 0.725, 0.820, 0.55)     # cream-blue highlight
+
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)
 var _centroids: Dictionary = {}       # id -> Vector2 normalized
@@ -288,8 +334,8 @@ func _generate_polygons() -> void:
 	# internal boundaries read as organic painted contours rather than clean
 	# geometric lines.
 	for id in on_continent_ids:
-		var seed: Vector2 = REGION_SEEDS[id]
-		var seed_hash: float = float(id.hash() & 0xFFFFFF) * 0.0000001
+		var region_center: Vector2 = REGION_SEEDS[id]
+		var phase: float = float(id.hash() & 0xFFFFFF) * 0.0000001
 		var poly: PackedVector2Array = PackedVector2Array()
 		for i in range(VORONOI_RAYS):
 			var ang: float = TAU * float(i) / float(VORONOI_RAYS)
@@ -300,27 +346,26 @@ func _generate_polygons() -> void:
 				if oid == id:
 					continue
 				var q: Vector2 = REGION_SEEDS[oid]
-				var to_q: Vector2 = q - seed
+				var to_q: Vector2 = q - region_center
 				var denom: float = to_q.dot(dir)
 				if denom > 0.00001:
 					var t: float = 0.5 * to_q.length_squared() / denom
 					if t > 0.0 and t < t_max:
 						t_max = t
 			# Outline clipping: never extend past the continent's coast.
-			var t_out: float = _ray_outline_distance(seed, dir, outline)
+			var t_out: float = _ray_outline_distance(region_center, dir, outline)
 			if t_out > 0.0 and t_out < t_max:
 				t_max = t_out
-			# Micro inset so adjacent polygons do not fight for the same pixel.
 			t_max = maxf(0.006, t_max - 0.0025)
 			var wobble: float = (
-				sin(ang * 3.0 + seed_hash * 31.0) * 0.017
-				+ sin(ang * 7.0 + seed_hash * 71.0) * 0.009
-				+ sin(ang * 13.0 + seed_hash * 113.0) * 0.004
+				sin(ang * 3.0 + phase * 31.0) * 0.017
+				+ sin(ang * 7.0 + phase * 71.0) * 0.009
+				+ sin(ang * 13.0 + phase * 113.0) * 0.004
 			)
 			var dist: float = t_max * (1.0 + wobble)
-			poly.append(seed + dir * dist)
+			poly.append(region_center + dir * dist)
 		_polygons[id] = [poly]
-		_centroids[id] = seed
+		_centroids[id] = region_center
 
 	# Internal political borders: each pair of adjacent seeds shares a
 	# bisector segment that we sample into a polyline (clipped approximately
@@ -690,6 +735,17 @@ func _draw() -> void:
 			var b: Vector2 = border[i + 1] * s
 			_draw_dashed_line(a, b, INTERNAL_BORDER, 1.2, 4.0, 3.0)
 
+	# Pass 2b2: painted rivers drawn over the land fill. Rivers go under the
+	# mountains so ridges appear to interrupt the waterways, echoing the look
+	# of hand-painted Tolkien-style maps.
+	_draw_river(s, MAIN_RIVER, 2.6, true)
+	_draw_river(s, TRIBUTARY, 2.0, false)
+
+	# Pass 2b3: mountain ranges painted along key internal boundaries. Little
+	# stacked triangles with snow caps reinforce geographic cohesion instead
+	# of the old grid feel.
+	_draw_mountain_ranges(s)
+
 	# Pass 2c: continent exterior coastlines. A double stroke (dark + faint
 	# cream beach rim) gives the silhouette that "painted-map" feel.
 	for ext in _continent_exteriors:
@@ -1011,6 +1067,78 @@ func _draw_cloud_shadows(s: Vector2) -> void:
 			var dx: float = -radius.x + (2.0 * radius.x) * (float(k) / 4.0)
 			var sub_r: float = radius.y * (0.85 - 0.15 * abs(float(k) - 2.0))
 			draw_circle(Vector2(x + dx, y), sub_r, CLOUD_COLOR)
+
+
+func _draw_river(s: Vector2, path: Array, core_width: float, with_delta: bool) -> void:
+	if path.size() < 2:
+		return
+	var n: int = path.size()
+	var samples: int = 96
+	var pts := PackedVector2Array()
+	for i in range(samples + 1):
+		var t: float = float(i) / float(samples)
+		var idx_f: float = t * float(n - 1)
+		var i0: int = clampi(int(floor(idx_f)), 0, n - 2)
+		var i1: int = i0 + 1
+		var u: float = idx_f - floor(idx_f)
+		var p_prev: Vector2 = path[max(i0 - 1, 0)]
+		var p_a: Vector2 = path[i0]
+		var p_b: Vector2 = path[i1]
+		var p_next: Vector2 = path[min(i1 + 1, n - 1)]
+		var pt: Vector2 = _catmull_rom(p_prev, p_a, p_b, p_next, u)
+		# Wobble perpendicular to tangent for natural meanders.
+		var tan_v: Vector2 = (p_b - p_a).normalized()
+		var nrm: Vector2 = Vector2(-tan_v.y, tan_v.x)
+		var wobble: float = sin(t * TAU * 6.0) * 0.005 + sin(t * TAU * 17.0) * 0.0025
+		pt += nrm * wobble
+		pts.append(pt * s)
+	# Halo pass then core.
+	draw_polyline(pts, RIVER_COLOR_HALO, core_width + 2.0, true)
+	draw_polyline(pts, RIVER_COLOR_CORE, core_width, true)
+	# Tiny delta fan at the outlet for the main river.
+	if with_delta:
+		var mouth: Vector2 = pts[pts.size() - 1]
+		var delta_col: Color = RIVER_COLOR_HALO
+		delta_col.a = 0.55
+		draw_circle(mouth, core_width * 2.0, delta_col)
+
+
+func _draw_mountain_ranges(s: Vector2) -> void:
+	for range_pts in MOUNTAIN_RANGES:
+		# Sample the range polyline and drop peaks every ~14 px in pixel space
+		# so ridges stay consistent across viewport scales.
+		var peaks: Array = []
+		for i in range(range_pts.size() - 1):
+			var a: Vector2 = Vector2(range_pts[i]) * s
+			var b: Vector2 = Vector2(range_pts[i + 1]) * s
+			var segment_len: float = a.distance_to(b)
+			var step: float = 11.0
+			var count: int = max(1, int(round(segment_len / step)))
+			for j in range(count):
+				var t: float = float(j) / float(count)
+				peaks.append(a.lerp(b, t))
+		peaks.append(Vector2(range_pts[range_pts.size() - 1]) * s)
+		# Render back-to-front so near peaks overlap distant ones with depth.
+		for idx in range(peaks.size()):
+			var p: Vector2 = peaks[idx]
+			var seed_i: int = int(p.x * 3.1 + p.y * 7.7) & 0xFF
+			var h: float = 10.0 + (seed_i % 40) * 0.22      # 10..18.8 px
+			var w: float = 11.0 + (seed_i % 28) * 0.28      # 11..18.8 px
+			var tip: Vector2 = Vector2(p.x, p.y - h)
+			var base_y: float = p.y + 1.5
+			var left: Vector2 = Vector2(p.x - w * 0.55, base_y)
+			var right: Vector2 = Vector2(p.x + w * 0.55, base_y)
+			var shade_anchor: Vector2 = Vector2(p.x + w * 0.22, base_y - 0.5)
+			# Body fill + shaded right slope for pixelated 3-tone look.
+			draw_colored_polygon(PackedVector2Array([left, tip, right]), MOUNTAIN_COLOR_BODY)
+			draw_colored_polygon(PackedVector2Array([tip, right, shade_anchor]), MOUNTAIN_COLOR_SHADE)
+			# Snow cap (slightly larger for readability at small sizes).
+			var cap_l: Vector2 = tip + Vector2(-w * 0.22, h * 0.42)
+			var cap_r: Vector2 = tip + Vector2(w * 0.22, h * 0.42)
+			draw_colored_polygon(PackedVector2Array([tip, cap_l, cap_r]), MOUNTAIN_COLOR_SNOW)
+			# Dark outline so peaks read crisply against the tan inland fill.
+			draw_polyline(PackedVector2Array([left, tip, right]),
+				MOUNTAIN_COLOR_OUTLINE, 1.3)
 
 
 func _draw_ocean_islets(s: Vector2) -> void:
