@@ -22,6 +22,7 @@ func initialize(base_config: Dictionary, meta_modifiers: Dictionary = {}, region
 
 	region_grid = RegionGridClass.new()
 	region_grid.initialize(region_defs)
+	region_grid.configure_propagation(config.get("propagation", {}))
 
 	var base_state: Dictionary = config.get("starting_values", {})
 	world_state = {
@@ -106,10 +107,13 @@ func apply_passive_turn_effects(meta_modifiers: Dictionary) -> void:
 	world_state["resources"] = clampi(int(world_state["resources"]) + int(meta_modifiers.get("resources_per_turn", 0)), 0, 100)
 
 	# Infection propagation between neighbors, with meta decay softening the blow.
-	var decay: int = int(meta_modifiers.get("crisis_decay", 0))
+	# The base decay comes from run_config.propagation.global_crisis_decay and is
+	# stacked with whatever the player unlocked as meta crisis_decay.
+	var propagation_cfg: Dictionary = config.get("propagation", {})
+	var decay: int = int(propagation_cfg.get("global_crisis_decay", 0)) + int(meta_modifiers.get("crisis_decay", 0))
 	var before_crisis: int = region_grid.global_crisis()
 	region_grid.propagate_infection(decay)
-	region_grid.apply_passive_influence_drift(1)
+	region_grid.apply_passive_influence_drift(int(propagation_cfg.get("passive_drift", 1)))
 
 	# Rising pressure: push infection up slightly in the most infected region to keep tension.
 	region_grid.distribute_effect("spread_infection", 2, "infection", 1)

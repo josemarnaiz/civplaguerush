@@ -20,6 +20,12 @@
     "stability_below": 10,
     "crisis_above": 90
   },
+  "propagation": {
+    "rate": 0.10,
+    "resistance_factor": 0.8,
+    "passive_drift": 1,
+    "global_crisis_decay": 0
+  },
   "meta_rewards": {
     "base_credits": 20,
     "win_bonus": 50,

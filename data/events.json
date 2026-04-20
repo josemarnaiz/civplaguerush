@@ -187,5 +187,81 @@
         "effects": { "resources": 6, "influence": -3 }
       }
     ]
+  },
+  {
+    "id": "sabotage_strike",
+    "title": "Sabotage strike on {region.name}",
+    "description": "Rival agents target {region.name}, your frontier stronghold. Every neighbor is watching how you respond.",
+    "template": "frontier_controlled",
+    "choices": [
+      {
+        "label": "Deploy rapid response in {region.short}",
+        "effects_regional": { "influence": 4, "stability": 6 },
+        "effects_adjacent": { "influence": 2 },
+        "effects": { "resources": -9 }
+      },
+      {
+        "label": "Investigate quietly",
+        "effects_regional": { "influence": -3, "infection": 4 },
+        "effects": { "resources": -3, "crisis": 3 }
+      },
+      {
+        "label": "Rally a retaliation",
+        "effects_regional": { "influence": 6 },
+        "effects_adjacent": { "infection": 3 },
+        "effects": { "resources": -5, "stability": -4 }
+      }
+    ]
+  },
+  {
+    "id": "cure_trial",
+    "title": "Cure trial — choose a host region",
+    "description": "Researchers are ready to pilot a promising cure. Which infected region gets the trial?",
+    "template": "player_chooses",
+    "target_filter": "infected",
+    "target_prompt": "Pick an infected region to host the cure trial.",
+    "choices": [
+      {
+        "label": "Full rollout in {region.short}",
+        "effects_regional": { "infection": -22, "stability": 4 },
+        "effects_adjacent": { "infection": -4 },
+        "effects": { "resources": -12 }
+      },
+      {
+        "label": "Cautious limited trial in {region.short}",
+        "effects_regional": { "infection": -10 },
+        "effects": { "resources": -6, "influence": 2 }
+      },
+      {
+        "label": "Divert the funding to propaganda",
+        "effects": { "influence": 6, "resources": -3, "crisis": 2 }
+      }
+    ]
+  },
+  {
+    "id": "mass_migration",
+    "title": "Mass migration into {region.name}",
+    "description": "Refugees pour into {region.name}, destabilizing the border next to your power.",
+    "template": "bordering_controlled",
+    "choices": [
+      {
+        "label": "Open corridors into {region.short}",
+        "effects_regional": { "influence": 6, "infection": 4 },
+        "effects_adjacent": { "stability": 3 },
+        "effects": { "resources": -7 }
+      },
+      {
+        "label": "Seal the border",
+        "effects_regional": { "infection": -4, "influence": -3 },
+        "effects_adjacent": { "infection": 4 },
+        "effects": { "stability": 2 }
+      },
+      {
+        "label": "Resettle into adjacent holdings",
+        "effects_regional": { "infection": -2 },
+        "effects_adjacent": { "influence": 3, "stability": -3 },
+        "effects": { "resources": -4 }
+      }
+    ]
   }
 ]

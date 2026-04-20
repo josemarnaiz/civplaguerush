@@ -178,31 +178,38 @@ Adyacencias = rectangular con diagonales (cada celda central tiene 8 vecinos, bo
 
 ## 5. Plan de implementación por fases
 
-### Fase 1: Modelo de datos + simulación (sin UI todavía)
-1. Crear `data/regions.json` con 12 regiones, adyacencias, estado inicial.
-2. Crear `scripts/systems/region_grid.gd` con `initialize`, `apply_regional_effect`, `propagate_infection`, derivados.
-3. Modificar `WorldSimulation` para componer `RegionGrid`. Calcular `control_regions` y `crisis` como derivados.
-4. Ajustar `RunScene` para inicializar `RegionGrid` (sin UI aún — el `StatsLabel` sigue mostrando los derivados).
-5. **Test manual**: correr una run y verificar que los stats globales siguen siendo coherentes.
+### Fase 1: Modelo de datos + simulación (sin UI todavía) — **DONE**
+1. [x] Crear `data/regions.json` con 12 regiones, adyacencias, estado inicial.
+2. [x] Crear `scripts/systems/region_grid.gd` con `initialize`, `apply_regional_effect`, `propagate_infection`, derivados.
+3. [x] Modificar `WorldSimulation` para componer `RegionGrid`. Calcular `control_regions` y `crisis` como derivados.
+4. [x] Ajustar `RunScene` para inicializar `RegionGrid` (el mapa orgánico sustituye al `StatsLabel` como fuente principal).
+5. [x] **Test manual**: stats globales coherentes tras decisiones y propagación (validado vía MCP).
 
-### Fase 2: Eventos regionales (mezcla con los globales existentes)
-6. Añadir 3-4 eventos nuevos con `template: regional_*` en `events.json`.
-7. Extender `EventDirector` para resolver templates y elegir regiones objetivo.
-8. Extender el resolver de efectos para soportar `effects_regional`, `effects_adjacent`.
-9. **Test**: evento "Outbreak in {region.name}" aparece con región real y las elecciones la afectan.
+### Fase 2: Eventos regionales (mezcla con los globales existentes) — **DONE**
+6. [x] Añadir eventos regionales con `template: ...` en `events.json` (`outbreak_focus`, `frontier_uprising`, `defector_cell`, `relief_mission`, y en Fase 4 `sabotage_strike`, `cure_trial`, `mass_migration`).
+7. [x] Extender `EventDirector` para resolver templates y elegir regiones objetivo (`most_infected`, `least_influence`, `bordering_controlled`, `frontier_controlled`, `player_chooses`).
+8. [x] Extender el resolver de efectos para soportar `effects_regional`, `effects_adjacent`.
+9. [x] **Test**: "Outbreak in {region.name}" aparece con región real y las elecciones la afectan (validado vía MCP).
 
-### Fase 3: UI del mini-mapa
-10. Crear `scenes/RegionMap.tscn` con 12 celdas (Panel + Label + ColorRect) en GridContainer 4x3.
-11. Script `scripts/ui/region_map.gd` con señal `region_clicked(id)`, método `refresh(snapshot)`, pintado por `influence`/`infection`.
-12. Integrar en `RunScene.tscn`. Refrescar tras cada decisión y en propagación.
-13. Añadir modo "pick region" para eventos regionales: el mini-mapa resalta regiones candidatas, el jugador clica para confirmar.
+### Fase 3: UI del mini-mapa — **DONE**
+10. [x] Crear `scenes/RegionMap.tscn` (no GridContainer — se usaron polígonos orgánicos por petición del director).
+11. [x] Script `scripts/ui/region_map.gd` con señal `region_clicked(id)`, métodos `refresh(snapshot)` / `build_from_snapshot`, pintado por `influence`/`infection`.
+12. [x] Integrar en `RunScene.tscn`. Refresco tras cada decisión y propagación.
+13. [x] Modo "pick region" para eventos regionales (`set_selectable` / `clear_selectable`).
 
-### Fase 4: Pulido y balance
-14. Ajustar `run_config.json`: `target_control_regions` (p. ej. 7), umbrales, tasas de propagación.
-15. Animación suave (tween) cuando cambia influence/infection de una celda.
-16. Tooltip con detalles al pasar el ratón.
-17. Feedback sonoro/visual cuando la propagación hace caer una región.
-18. Actualizar `docs/DESIGN_regional_map.md` con la versión final implementada.
+### Fase 4: Pulido y balance — **DONE**
+14. [x] Ajustar `run_config.json`: `win_conditions.target_control_regions = 7`, `max_crisis_for_win = 50`, bloque `propagation` (`rate`, `resistance_factor`, `passive_drift`, `global_crisis_decay`).
+15. [x] Animación suave (tween) cuando cambia influence/infection — via `_display_values` lerp en `region_map.gd`.
+16. [x] Tooltip con detalles al pasar el ratón (región + stats + vecinos).
+17. [x] Feedback visual cuando un evento regional apunta a una región (`set_active_target` → pulse dorado). *Pendiente*: flash rojo cuando una región pierde control por debajo del umbral — opcional.
+18. [x] Actualizar `docs/DESIGN_regional_map.md` con el estado implementado (este documento).
+
+### Fase 5 (post-release): distribución — **DONE inicialmente**
+19. [x] `export_presets.cfg` configurado para Web, Windows Desktop, Android.
+20. [x] Build Windows validada: `build/windows/CivPlagueRush.exe` arranca con el theme Ashen Fresco.
+21. [x] Autoplay headless: `tools/autoplay_exe.ps1` corre una run completa contra el `.exe` exportado usando el MCP TCP embebido, con snapshots por turno en `build/windows/autoplay-runs/<stamp>/`.
+22. [ ] Exportar y validar preset Web (siguiente sprint).
+23. [ ] Exportar y validar preset Android (siguiente sprint).
 
 ---
 

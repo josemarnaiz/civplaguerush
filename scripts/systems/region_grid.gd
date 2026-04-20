@@ -10,6 +10,12 @@ var region_order: Array = []
 var grid_cols: int = 4
 var grid_rows: int = 3
 
+# Tunable via run_config.json -> "propagation": { ... }. Defaults match the
+# constants above so existing callers keep the same behaviour.
+var propagation_rate: float = PROPAGATION_RATE
+var resistance_factor: float = RESISTANCE_FACTOR
+var passive_drift: int = 1
+
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
@@ -39,6 +45,12 @@ func initialize(region_defs_root: Dictionary) -> void:
 			"stability": clampi(int(start.get("stability", 50)), 0, 100)
 		}
 		region_order.append(id)
+
+
+func configure_propagation(config: Dictionary) -> void:
+	propagation_rate = float(config.get("rate", PROPAGATION_RATE))
+	resistance_factor = float(config.get("resistance_factor", RESISTANCE_FACTOR))
+	passive_drift = int(config.get("passive_drift", 1))
 
 
 func has_region(region_id: String) -> bool:
@@ -113,8 +125,8 @@ func propagate_infection(global_crisis_decay: int = 0) -> void:
 			var n: Dictionary = regions[nid]
 			var diff: float = float(int(n["infection"]) - int(r["infection"]))
 			if diff > 0.0:
-				var resistance: float = 1.0 - (float(r["influence"]) / 100.0) * RESISTANCE_FACTOR
-				delta += diff * PROPAGATION_RATE * resistance
+				var resistance: float = 1.0 - (float(r["influence"]) / 100.0) * resistance_factor
+				delta += diff * propagation_rate * resistance
 		deltas[id] = delta
 
 	for id in region_order:
