@@ -93,5 +93,175 @@
         "effects": { "resources": 2, "influence": -3 }
       }
     ]
+  },
+  {
+    "id": "outbreak_focus",
+    "title": "Outbreak in {region.name}",
+    "description": "{region.name} is spiraling into a new infection wave. Neighboring regions watch anxiously.",
+    "template": "most_infected",
+    "choices": [
+      {
+        "label": "Hard quarantine of {region.short}",
+        "effects_regional": { "infection": -18, "influence": -4, "stability": -3 },
+        "effects": { "resources": -6 }
+      },
+      {
+        "label": "Rush a medical aid package",
+        "effects_regional": { "infection": -10, "stability": 4 },
+        "effects": { "resources": -10 }
+      },
+      {
+        "label": "Fortify a cordon around {region.short}",
+        "effects_regional": { "infection": 6 },
+        "effects_adjacent": { "influence": 2, "infection": -3 },
+        "effects": { "resources": -3 }
+      }
+    ]
+  },
+  {
+    "id": "frontier_uprising",
+    "title": "Unrest on the {region.short} frontier",
+    "description": "Tensions flare in {region.name}, a contested border next to your power.",
+    "template": "bordering_controlled",
+    "choices": [
+      {
+        "label": "Deploy loyalist cadre",
+        "effects_regional": { "influence": 12, "stability": -4 },
+        "effects": { "resources": -5 }
+      },
+      {
+        "label": "Offer trade incentives",
+        "effects_regional": { "influence": 7, "stability": 4 },
+        "effects": { "resources": -8 }
+      },
+      {
+        "label": "Ignore the unrest",
+        "effects_regional": { "infection": 5, "influence": -2 },
+        "effects": { "stability": -2 }
+      }
+    ]
+  },
+  {
+    "id": "defector_cell",
+    "title": "Defector cell in {region.name}",
+    "description": "Rival cells organize out of {region.name}, eyeing your nearby holdings.",
+    "template": "least_influence",
+    "choices": [
+      {
+        "label": "Infiltrate and co-opt",
+        "effects_regional": { "influence": 8 },
+        "effects": { "resources": -6, "crisis": 2 }
+      },
+      {
+        "label": "Economic siege on {region.short}",
+        "effects_regional": { "influence": 5, "stability": -6 },
+        "effects": { "resources": -3 }
+      },
+      {
+        "label": "Let them bleed themselves",
+        "effects_adjacent": { "infection": 3 },
+        "effects": { "crisis": 3 }
+      }
+    ]
+  },
+  {
+    "id": "relief_mission",
+    "title": "Relief mission — choose a destination",
+    "description": "A charitable coalition will flood resources into the region you designate.",
+    "template": "player_chooses",
+    "target_filter": "uncontrolled",
+    "target_prompt": "Pick an uncontrolled region to receive relief.",
+    "choices": [
+      {
+        "label": "Infrastructure push in {region.short}",
+        "effects_regional": { "influence": 10, "stability": 5 },
+        "effects": { "resources": -8 }
+      },
+      {
+        "label": "Disease eradication in {region.short}",
+        "effects_regional": { "infection": -15, "stability": 3 },
+        "effects": { "resources": -10 }
+      },
+      {
+        "label": "Redirect resources home instead",
+        "effects": { "resources": 6, "influence": -3 }
+      }
+    ]
+  },
+  {
+    "id": "sabotage_strike",
+    "title": "Sabotage strike on {region.name}",
+    "description": "Rival agents target {region.name}, your frontier stronghold. Every neighbor is watching how you respond.",
+    "template": "frontier_controlled",
+    "choices": [
+      {
+        "label": "Deploy rapid response in {region.short}",
+        "effects_regional": { "influence": 4, "stability": 6 },
+        "effects_adjacent": { "influence": 2 },
+        "effects": { "resources": -9 }
+      },
+      {
+        "label": "Investigate quietly",
+        "effects_regional": { "influence": -3, "infection": 4 },
+        "effects": { "resources": -3, "crisis": 3 }
+      },
+      {
+        "label": "Rally a retaliation",
+        "effects_regional": { "influence": 6 },
+        "effects_adjacent": { "infection": 3 },
+        "effects": { "resources": -5, "stability": -4 }
+      }
+    ]
+  },
+  {
+    "id": "cure_trial",
+    "title": "Cure trial — choose a host region",
+    "description": "Researchers are ready to pilot a promising cure. Which infected region gets the trial?",
+    "template": "player_chooses",
+    "target_filter": "infected",
+    "target_prompt": "Pick an infected region to host the cure trial.",
+    "choices": [
+      {
+        "label": "Full rollout in {region.short}",
+        "effects_regional": { "infection": -22, "stability": 4 },
+        "effects_adjacent": { "infection": -4 },
+        "effects": { "resources": -12 }
+      },
+      {
+        "label": "Cautious limited trial in {region.short}",
+        "effects_regional": { "infection": -10 },
+        "effects": { "resources": -6, "influence": 2 }
+      },
+      {
+        "label": "Divert the funding to propaganda",
+        "effects": { "influence": 6, "resources": -3, "crisis": 2 }
+      }
+    ]
+  },
+  {
+    "id": "mass_migration",
+    "title": "Mass migration into {region.name}",
+    "description": "Refugees pour into {region.name}, destabilizing the border next to your power.",
+    "template": "bordering_controlled",
+    "choices": [
+      {
+        "label": "Open corridors into {region.short}",
+        "effects_regional": { "influence": 6, "infection": 4 },
+        "effects_adjacent": { "stability": 3 },
+        "effects": { "resources": -7 }
+      },
+      {
+        "label": "Seal the border",
+        "effects_regional": { "infection": -4, "influence": -3 },
+        "effects_adjacent": { "infection": 4 },
+        "effects": { "stability": 2 }
+      },
+      {
+        "label": "Resettle into adjacent holdings",
+        "effects_regional": { "infection": -2 },
+        "effects_adjacent": { "influence": 3, "stability": -3 },
+        "effects": { "resources": -4 }
+      }
+    ]
   }
 ]

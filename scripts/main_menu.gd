@@ -1,15 +1,14 @@
 extends Control
 
-@onready var title_label: Label = $Margin/VBox/Title
+# Title is now a TextureRect with the painted logo; no runtime text assignment.
 @onready var subtitle_label: Label = $Margin/VBox/SubTitle
-@onready var chapter_intro_label: Label = $Margin/VBox/ChapterIntro
+@onready var chapter_intro_label: Label = $Margin/VBox/ChapterPanel/ChapterMargin/ChapterIntro
 @onready var start_button: Button = $Margin/VBox/Actions/StartRunButton
 @onready var meta_button: Button = $Margin/VBox/Actions/MetaButton
 @onready var quit_button: Button = $Margin/VBox/Actions/QuitButton
 
 
 func _ready() -> void:
-	title_label.text = "CivPlagueRush"
 	subtitle_label.text = "8-12 minute runs, permanent progression, chapter-driven campaign."
 	chapter_intro_label.text = _chapter_intro_text()
 

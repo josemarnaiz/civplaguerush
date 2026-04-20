@@ -32,3 +32,13 @@ Run telemetry is written to `user://metrics_runs.jsonl` with:
 - `project.godot` configured with mobile renderer and stretch mode.
 - `scripts/systems/platform_profile.gd` adapts control sizing by platform feature flags.
 - `export_presets.cfg` includes baseline Web, Windows, and Android export presets.
+
+## Build and Export
+- One-time install of Godot export templates: `powershell -ExecutionPolicy Bypass -File .\tools\install_export_templates.ps1`
+- Check environment: `powershell -ExecutionPolicy Bypass -File .\tools\check_export_prereqs.ps1 -Preset Web`
+- Export Windows debug: `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset WindowsDesktop`
+- Export Web debug: `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset Web`
+- Export all platforms: `powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -All`
+- Serve the Web build locally: `powershell -ExecutionPolicy Bypass -File .\tools\serve_web.ps1 -Open`
+- Full setup and troubleshooting: `docs/EXPORT_SETUP.md`
+- CI builds (Windows + Web) run automatically via GitHub Actions.
