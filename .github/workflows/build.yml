@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, "cursor/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -11,48 +11,72 @@ env:
   GODOT_VERSION: 4.6.2
   GODOT_CHANNEL: stable
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  linux-export:
-    name: Export Linux + Web (Godot ${{ env.GODOT_VERSION }}-${{ env.GODOT_CHANNEL }})
+  web-export:
+    name: Export Web (Linux runner)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install runtime deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            unzip ca-certificates curl libfontconfig1 libxcursor1 libxinerama1 \
+            libxi6 libxrandr2 libxext6 libx11-6 libgl1 libxkbcommon0 libxss1
+
       - name: Install Godot
         run: |
           set -eux
           GODOT_TAG="${GODOT_VERSION}-${GODOT_CHANNEL}"
-          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_linux.x86_64.zip"
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_linux.x86_64.zip"
           unzip -q godot.zip
-          chmod +x Godot_v${GODOT_TAG}_linux.x86_64
-          sudo mv Godot_v${GODOT_TAG}_linux.x86_64 /usr/local/bin/godot
+          chmod +x "Godot_v${GODOT_TAG}_linux.x86_64"
+          sudo mv "Godot_v${GODOT_TAG}_linux.x86_64" /usr/local/bin/godot
           godot --version
 
+      - name: Cache export templates
+        id: tpl-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.${{ env.GODOT_CHANNEL }}
+          key: godot-templates-${{ env.GODOT_VERSION }}-${{ env.GODOT_CHANNEL }}-linux
+
       - name: Install export templates
+        if: steps.tpl-cache.outputs.cache-hit != 'true'
         run: |
           set -eux
           GODOT_TAG="${GODOT_VERSION}-${GODOT_CHANNEL}"
           TPL_DIR="${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_CHANNEL}"
           mkdir -p "${TPL_DIR}"
-          curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_export_templates.tpz"
-          cp templates.tpz templates.zip
-          unzip -q templates.zip
-          cp -r templates/. "${TPL_DIR}/"
+          curl -fL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_export_templates.tpz"
+          # .tpz is a regular zip
+          unzip -q templates.tpz -d templates_extract
+          cp -r templates_extract/templates/. "${TPL_DIR}/"
+          rm -rf templates_extract templates.tpz
           ls "${TPL_DIR}" | head
 
-      - name: Import project
+      - name: Import project (warm asset cache)
         run: |
-          mkdir -p build/linux build/web
+          set -eux
+          mkdir -p build/web
+          # First import populates .godot/imported. Errors here are tolerated
+          # because some import warnings are expected on cold caches.
           godot --headless --path . --import --quit || true
-
-      - name: Export Linux/X11
-        run: |
-          godot --headless --path . --export-debug "LinuxX11" "build/linux/CivPlagueRush.x86_64" || true
-          ls -la build/linux || true
 
       - name: Export Web
         run: |
+          set -eux
           godot --headless --path . --export-debug "Web" "build/web/index.html"
           ls -la build/web
 
@@ -63,20 +87,32 @@ jobs:
           path: build/web/
           if-no-files-found: error
 
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Prepare Pages payload
+        run: |
+          set -eux
+          mkdir -p pages
+          cp -r build/web/. pages/
+          ls -la pages
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: linux-debug
-          path: build/linux/
-          if-no-files-found: ignore
+          path: pages
 
   windows-export:
-    name: Export Windows (Godot ${{ env.GODOT_VERSION }}-${{ env.GODOT_CHANNEL }})
+    name: Export Windows
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache export templates
+        id: tpl-cache-win
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Roaming/Godot/export_templates/${{ env.GODOT_VERSION }}.${{ env.GODOT_CHANNEL }}
+          key: godot-templates-${{ env.GODOT_VERSION }}-${{ env.GODOT_CHANNEL }}-win
 
       - name: Install Godot
         shell: pwsh
@@ -85,17 +121,26 @@ jobs:
           $url = "https://github.com/godotengine/godot/releases/download/${tag}/Godot_v${tag}_win64.exe.zip"
           Invoke-WebRequest -Uri $url -OutFile godot.zip -UseBasicParsing
           Expand-Archive -Force godot.zip -DestinationPath godot
-          $exe = Get-ChildItem godot -Filter "Godot_v*win64.exe" | Select-Object -First 1
+          $exe = Get-ChildItem godot -Filter "Godot_v*win64.exe" | Where-Object { $_.Name -notlike "*console*" } | Select-Object -First 1
           if (-not $exe) { throw "Godot binary missing after extract" }
-          "GODOT_PATH=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
+          # Use Add-Content with explicit UTF-8 (no BOM) to avoid env parse errors.
+          Add-Content -Path $env:GITHUB_ENV -Value "GODOT_PATH=$($exe.FullName)" -Encoding utf8
 
       - name: Install export templates
+        if: steps.tpl-cache-win.outputs.cache-hit != 'true'
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File .\tools\install_export_templates.ps1
+        run: |
+          .\tools\install_export_templates.ps1 -GodotVersion $env:GODOT_VERSION -GodotChannel $env:GODOT_CHANNEL
+
+      - name: Verify environment
+        shell: pwsh
+        run: |
+          .\tools\check_export_prereqs.ps1 -Preset WindowsDesktop -GodotPath $env:GODOT_PATH
 
       - name: Export Windows
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File .\tools\export.ps1 -Preset WindowsDesktop
+        run: |
+          .\tools\export.ps1 -Preset WindowsDesktop -GodotPath $env:GODOT_PATH
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -103,3 +148,16 @@ jobs:
           name: windows-debug
           path: build/windows/
           if-no-files-found: error
+
+  deploy-pages:
+    name: Deploy Web to GitHub Pages
+    needs: web-export
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
