@@ -693,20 +693,46 @@ func _draw() -> void:
 				continue
 			var c: Vector2 = _centroids[id] * s
 			var short_name: String = String(r.get("short", id))
-			var stats_text: String = "I:%d V:%d" % [int(r.get("influence", 0)), int(r.get("infection", 0))]
+			var infl_val: int = int(r.get("influence", 0))
+			var inf_val: int = int(r.get("infection", 0))
+			# Two-part label: "INF NN" in cream, "PLG NN" in rose-red. Separated
+			# by a faint dot. Unambiguous reading vs. the older "I:NN V:NN" where
+			# V was opaque (viral? virulence? volume?).
+			var infl_text: String = "INF %d" % infl_val
+			var sep: String = " . "
+			var plg_text: String = "PLG %d" % inf_val
 			var ns: Vector2 = font.get_string_size(short_name, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size)
-			var ss: Vector2 = font.get_string_size(stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size)
-			# Name sits just below the biome icon; stats under the name.
+			var infl_size: Vector2 = font.get_string_size(infl_text, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size)
+			var sep_size: Vector2 = font.get_string_size(sep, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size)
+			var plg_size: Vector2 = font.get_string_size(plg_text, HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size)
+			var total_w: float = infl_size.x + sep_size.x + plg_size.x
 			var name_pos: Vector2 = Vector2(c.x - ns.x / 2.0, c.y + 12.0)
-			var stats_pos: Vector2 = Vector2(c.x - ss.x / 2.0, c.y + 24.0)
+			var stats_x: float = c.x - total_w / 2.0
+			var stats_y: float = c.y + 24.0
+			# Drop shadow pass for readability on busy fills.
 			draw_string(font, name_pos + Vector2(1, 1), short_name,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(0, 0, 0, 0.75))
 			draw_string(font, name_pos, short_name,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, TOOLTIP_TITLE)
-			draw_string(font, stats_pos + Vector2(1, 1), stats_text,
+			var infl_color: Color = TOOLTIP_TEXT
+			var plg_color: Color = Color(0.851, 0.329, 0.306, 1.0)  # R4 rose-red
+			if inf_val >= 50:
+				plg_color = Color(0.920, 0.430, 0.370, 1.0)  # brighter if the region is actively plagued
+			# Cream half: INF NN
+			draw_string(font, Vector2(stats_x + 1.0, stats_y + 1.0), infl_text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(0, 0, 0, 0.6))
-			draw_string(font, stats_pos, stats_text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, TOOLTIP_TEXT)
+			draw_string(font, Vector2(stats_x, stats_y), infl_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, infl_color)
+			# Dim dot separator
+			var sep_x: float = stats_x + infl_size.x
+			draw_string(font, Vector2(sep_x, stats_y), sep,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(1, 1, 1, 0.45))
+			# Rose-red half: PLG NN
+			var plg_x: float = sep_x + sep_size.x
+			draw_string(font, Vector2(plg_x + 1.0, stats_y + 1.0), plg_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, Color(0, 0, 0, 0.6))
+			draw_string(font, Vector2(plg_x, stats_y), plg_text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, stats_size, plg_color)
 
 	# Pass 4: plague sigil on the most-infected region (the outbreak focus).
 	# A pulsing halo behind the sigil reads as a warning beacon.
@@ -745,6 +771,27 @@ func _draw() -> void:
 		var rose_pos: Vector2 = Vector2(s.x - COMPASS_SIZE - 10.0, s.y - COMPASS_SIZE - 10.0)
 		var rose_rect := Rect2(rose_pos, Vector2(COMPASS_SIZE, COMPASS_SIZE))
 		draw_texture_rect(_compass_rose, rose_rect, false, Color(1, 1, 1, 0.82))
+
+	# Pass 6b: legend stripe in the bottom-left so a new player can decode the
+	# region labels (INF / PLG) without needing the tooltip.
+	var legend_font: Font = get_theme_default_font()
+	if legend_font != null:
+		var fs: int = 10
+		var cream: Color = Color(0.851, 0.776, 0.635, 1.0)
+		var rose: Color = Color(0.851, 0.329, 0.306, 1.0)
+		var dim: Color = Color(1, 1, 1, 0.55)
+		var legend_y: float = s.y - 14.0
+		var lx: float = 12.0
+		var shadow: Color = Color(0, 0, 0, 0.75)
+		draw_string(legend_font, Vector2(lx + 1.0, legend_y + 1.0), "INF", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, shadow)
+		draw_string(legend_font, Vector2(lx, legend_y), "INF", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, cream)
+		lx += legend_font.get_string_size("INF", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 4.0
+		draw_string(legend_font, Vector2(lx, legend_y), "influence", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, dim)
+		lx += legend_font.get_string_size("influence", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 12.0
+		draw_string(legend_font, Vector2(lx + 1.0, legend_y + 1.0), "PLG", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, shadow)
+		draw_string(legend_font, Vector2(lx, legend_y), "PLG", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, rose)
+		lx += legend_font.get_string_size("PLG", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 4.0
+		draw_string(legend_font, Vector2(lx, legend_y), "plague", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, dim)
 
 	# Pass 7: turn-advance flash overlay (fades out over ~0.6s). The flash is
 	# a horizontal gradient bloom so it reads as a "dawn breaking" moment
@@ -789,7 +836,7 @@ func _draw_hover_tooltip(s: Vector2) -> void:
 		return
 
 	var title: String = String(region.get("name", ""))
-	var stats: String = "Influence %d    Infection %d    Stability %d" % [
+	var stats: String = "Influence %d    Plague %d    Stability %d" % [
 		int(region.get("influence", 0)),
 		int(region.get("infection", 0)),
 		int(region.get("stability", 0))

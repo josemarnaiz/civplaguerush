@@ -207,11 +207,6 @@ func _render_current_event() -> void:
 
 	_update_active_target(event_data)
 
-	# Build a bright "select a region on the map" hint as the first child of the
-	# Choices VBox while we wait for a region pick (see BUG-005). Rebuilding on
-	# every render keeps it in sync with _awaiting_region_pick transitions.
-	_rebuild_pick_mode_hint(pending_pick)
-
 	for choice in event_data.get("choices", []):
 		var button := Button.new()
 		button.text = _display_text(String(choice.get("label", "Choose")), pending_pick, display_placeholder)
@@ -237,33 +232,6 @@ func _render_current_event() -> void:
 
 	_render_state()
 	_animate_event_reveal()
-
-
-# Injects / removes a bright "Select a region on the map above." hint at the
-# top of the Choices VBox while the current event is a player_chooses one and
-# the player has not yet picked a region. Having the hint inside the VBox
-# makes it stack cleanly above the disabled option buttons (see BUG-005).
-func _rebuild_pick_mode_hint(pending_pick: bool) -> void:
-	if choices_container == null:
-		return
-	for child in choices_container.get_children():
-		if child is Label and child.name == "PickModeHint":
-			child.queue_free()
-	if not pending_pick:
-		return
-	var hint := Label.new()
-	hint.name = "PickModeHint"
-	hint.text = "↑ Select a region on the map above"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 16)
-	# O4 gold from Ashen Fresco palette so it reads as a waiting prompt rather
-	# than an error state (red).
-	hint.add_theme_color_override("font_color", Color(0.910, 0.753, 0.408, 1.0))
-	hint.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
-	hint.add_theme_constant_override("outline_size", 4)
-	choices_container.add_child(hint)
-	# Keep the hint above the option buttons.
-	choices_container.move_child(hint, 0)
 
 
 # --- Regional pick mode ----------------------------------------------------

@@ -476,3 +476,21 @@ El banner vive el ciclo de vida del pick: se añade en
 `_begin_region_pick_mode`, se libera automáticamente por el `queue_free`
 de children en el próximo `_render_current_event`, y el tween de breath se
 almacena como meta por si hubiera que cortarlo antes.
+
+### 9.10 Etiquetas del mapa + legenda (`I:V:` → `INF/PLG`)
+Las etiquetas de región usaban `I:NN V:NN` — ambiguas (QA BUG-008). El
+nuevo formato es `INF NN . PLG NN` en dos mitades pintadas con color:
+
+- **INF** en cream TOOLTIP_TEXT (influencia política del jugador).
+- Separador `" . "` en alpha 0.45 para crear ritmo sin ruido.
+- **PLG** en R4 rose-red, bumpeado a R4+0.07 luminosidad cuando la región
+  ≥ 50% de plaga (refuerzo visual con los tendrils de 9.6).
+
+En la esquina inferior izquierda del mapa vive una mini-legenda de 10 pt:
+`INF influence · PLG plague` (siglas en su color real, glosas en alpha
+0.55) para que la primera vez que se vea la UI, el significado quede claro
+sin necesidad de hover.
+
+El tooltip se alineó al nuevo vocabulario (`Plague` en vez de
+`Infection`) para que la palabra que ve el jugador al hoverar coincida
+con la abreviatura que lee en el label.
