@@ -735,6 +735,11 @@ func _draw() -> void:
 			var b: Vector2 = border[i + 1] * s
 			_draw_dashed_line(a, b, INTERNAL_BORDER, 1.2, 4.0, 3.0)
 
+	# Pass 2b1: per-biome cartographic ornaments (forests, dunes, ruins dots,
+	# ember sparks) scattered inside their regions — makes each region read
+	# visually distinct beyond its fill color, like a hand-painted map.
+	_draw_biome_ornaments(s)
+
 	# Pass 2b2: painted rivers drawn over the land fill. Rivers go under the
 	# mountains so ridges appear to interrupt the waterways, echoing the look
 	# of hand-painted Tolkien-style maps.
@@ -1067,6 +1072,154 @@ func _draw_cloud_shadows(s: Vector2) -> void:
 			var dx: float = -radius.x + (2.0 * radius.x) * (float(k) / 4.0)
 			var sub_r: float = radius.y * (0.85 - 0.15 * abs(float(k) - 2.0))
 			draw_circle(Vector2(x + dx, y), sub_r, CLOUD_COLOR)
+
+
+func _draw_biome_ornaments(s: Vector2) -> void:
+	# Each region gets a scatter of biome-appropriate micro-icons inside its
+	# Voronoi polygon. All scatters are deterministic (per-region seed) so the
+	# ornaments lock in place instead of drifting every frame.
+	for r in _snapshot:
+		var rid: String = String(r.get("id", ""))
+		if not _polygons.has(rid):
+			continue
+		if OFFSHORE_IDS.has(rid):
+			continue
+		var poly: PackedVector2Array = _polygons[rid][0]
+		var biome: String = String(BIOME_BY_REGION.get(rid, ""))
+		var center_px: Vector2 = _centroids[rid] * s
+		match biome:
+			"veil", "jungle":
+				_draw_forest_cluster(s, poly, rid, center_px, biome == "jungle")
+			"drylands":
+				_draw_dune_waves(s, poly, rid, center_px)
+			"ruins":
+				_draw_ruin_markers(s, poly, rid, center_px)
+			"volcano":
+				_draw_ember_sparks(s, poly, rid, center_px)
+			"tundra":
+				_draw_ice_flecks(s, poly, rid, center_px)
+
+
+func _region_scatter_points(poly: PackedVector2Array, center: Vector2, rid: String,
+		count: int, radius_ratio: float, s: Vector2) -> Array:
+	# Sample random points inside the polygon using rejection, seeded by rid.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("orn_" + rid)
+	# Build bounding box of the polygon (pixel space).
+	var px_poly: PackedVector2Array = PackedVector2Array()
+	for v in poly:
+		px_poly.append(v * s)
+	var min_v: Vector2 = px_poly[0]
+	var max_v: Vector2 = px_poly[0]
+	for p in px_poly:
+		min_v.x = minf(min_v.x, p.x)
+		min_v.y = minf(min_v.y, p.y)
+		max_v.x = maxf(max_v.x, p.x)
+		max_v.y = maxf(max_v.y, p.y)
+	# Shrink bounds so ornaments don't sit right on the coast/border.
+	var inset: float = (max_v - min_v).length() * radius_ratio * 0.07
+	min_v += Vector2(inset, inset)
+	max_v -= Vector2(inset, inset)
+	var result: Array = []
+	var tries: int = 0
+	while result.size() < count and tries < count * 24:
+		tries += 1
+		var sample: Vector2 = Vector2(
+			rng.randf_range(min_v.x, max_v.x),
+			rng.randf_range(min_v.y, max_v.y)
+		)
+		if Geometry2D.is_point_in_polygon(sample, px_poly):
+			# Avoid overlapping the centroid (where biome icon + labels sit).
+			if sample.distance_to(center) > 22.0:
+				result.append(sample)
+	return result
+
+
+func _draw_forest_cluster(s: Vector2, poly: PackedVector2Array, rid: String,
+		center: Vector2, is_jungle: bool) -> void:
+	var body: Color = Color(0.247, 0.349, 0.204, 1.0) if is_jungle else Color(0.298, 0.384, 0.200, 1.0)
+	var hi: Color = Color(0.459, 0.588, 0.282, 1.0) if is_jungle else Color(0.502, 0.604, 0.306, 1.0)
+	var outline: Color = Color(0.059, 0.039, 0.055, 0.85)
+	var count: int = 12 if is_jungle else 9
+	var points: Array = _region_scatter_points(poly, center, rid, count, 1.0, s)
+	for p in points:
+		# Little pine: triangle with lighter upper triangle as light-side.
+		var h: float = 9.0 if is_jungle else 7.0
+		var w: float = 6.0 if is_jungle else 5.0
+		var tip: Vector2 = p + Vector2(0, -h)
+		var l: Vector2 = p + Vector2(-w, 0)
+		var rr: Vector2 = p + Vector2(w, 0)
+		draw_colored_polygon(PackedVector2Array([l, tip, rr]), body)
+		# Upper light wedge
+		var mid: Vector2 = p + Vector2(-w * 0.15, -h * 0.55)
+		var ltop: Vector2 = tip + Vector2(-w * 0.15, h * 0.2)
+		var rtop: Vector2 = tip + Vector2(w * 0.05, h * 0.2)
+		draw_colored_polygon(PackedVector2Array([ltop, tip, rtop, mid]), hi)
+		# Trunk stub
+		draw_rect(Rect2(p + Vector2(-0.8, 0), Vector2(1.6, 2.0)),
+			Color(0.200, 0.141, 0.122, 1.0), true)
+		draw_polyline(PackedVector2Array([l, tip, rr]), outline, 1.0)
+
+
+func _draw_dune_waves(s: Vector2, poly: PackedVector2Array, rid: String,
+		center: Vector2) -> void:
+	var dune_color: Color = Color(0.780, 0.651, 0.420, 0.80)  # O2 warm sand
+	var count: int = 5
+	var points: Array = _region_scatter_points(poly, center, rid, count, 1.0, s)
+	for p in points:
+		var w: float = 16.0
+		var pts := PackedVector2Array()
+		for i in range(9):
+			var t: float = float(i) / 8.0
+			var x: float = p.x - w * 0.5 + w * t
+			var y: float = p.y + sin(t * PI) * -2.2
+			pts.append(Vector2(x, y))
+		draw_polyline(pts, dune_color, 1.1, true)
+
+
+func _draw_ruin_markers(s: Vector2, poly: PackedVector2Array, rid: String,
+		center: Vector2) -> void:
+	var stone: Color = Color(0.478, 0.396, 0.376, 1.0)  # C1 aged stone
+	var crack: Color = Color(0.059, 0.039, 0.055, 0.85)
+	var count: int = 7
+	var points: Array = _region_scatter_points(poly, center, rid, count, 1.0, s)
+	for p in points:
+		# Tiny broken column: 3 stacked rectangles with a break notch.
+		draw_rect(Rect2(p + Vector2(-2.5, -5.0), Vector2(5.0, 1.8)), stone, true)
+		draw_rect(Rect2(p + Vector2(-2.0, -3.0), Vector2(4.0, 1.5)), stone, true)
+		draw_rect(Rect2(p + Vector2(-2.5, -1.0), Vector2(5.0, 1.8)), stone, true)
+		draw_line(p + Vector2(-2.5, -5.0), p + Vector2(-2.5, 0.8), crack, 1.0)
+		draw_line(p + Vector2(2.5, -5.0), p + Vector2(2.5, 0.8), crack, 1.0)
+
+
+func _draw_ember_sparks(s: Vector2, poly: PackedVector2Array, rid: String,
+		center: Vector2) -> void:
+	var ember: Color = Color(0.851, 0.329, 0.306, 0.90)  # R4
+	var hot: Color = Color(0.969, 0.620, 0.243, 0.90)     # R5 glow
+	var count: int = 9
+	var points: Array = _region_scatter_points(poly, center, rid, count, 1.0, s)
+	var puls: float = 0.5 + 0.5 * sin(_time * 2.3)
+	for i in range(points.size()):
+		var p: Vector2 = points[i]
+		var radius_inner: float = 1.4 + (i & 3) * 0.35
+		var radius_outer: float = radius_inner + 1.6 + puls * 0.8
+		var halo: Color = hot
+		halo.a = 0.45 * (0.6 + 0.4 * puls)
+		draw_circle(p, radius_outer, halo)
+		draw_circle(p, radius_inner, ember)
+
+
+func _draw_ice_flecks(s: Vector2, poly: PackedVector2Array, rid: String,
+		center: Vector2) -> void:
+	var fleck: Color = Color(0.910, 0.957, 0.980, 0.75)
+	var count: int = 11
+	var points: Array = _region_scatter_points(poly, center, rid, count, 1.0, s)
+	for p in points:
+		# Four-pointed star (ice shard) using a tiny diamond plus cross.
+		draw_line(p + Vector2(-2.2, 0), p + Vector2(2.2, 0), fleck, 1.0)
+		draw_line(p + Vector2(0, -2.2), p + Vector2(0, 2.2), fleck, 1.0)
+		draw_line(p + Vector2(-1.4, -1.4), p + Vector2(1.4, 1.4), fleck, 0.8)
+		draw_line(p + Vector2(-1.4, 1.4), p + Vector2(1.4, -1.4), fleck, 0.8)
 
 
 func _draw_river(s: Vector2, path: Array, core_width: float, with_delta: bool) -> void:
