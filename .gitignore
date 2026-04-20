@@ -1,0 +1,31 @@
+# Godot 4+ specific ignores
+.godot/
+.import/
+export.cfg
+*.translation
+*.mo
+
+# Build artifacts
+build/
+exports/
+
+# Runtime logs
+run_log.txt
+run_log.txt.err
+*.log
+
+# Generated screenshots and captures
+.cursor/*.png
+.cursor/*.log
+.cursor/last_run.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
