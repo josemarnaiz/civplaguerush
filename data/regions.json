@@ -1,0 +1,106 @@
+{
+  "grid_size": { "cols": 4, "rows": 3 },
+  "starting_values": {
+    "neutral_influence": 20,
+    "neutral_infection": 5,
+    "neutral_stability": 50
+  },
+  "regions": [
+    {
+      "id": "r01",
+      "name": "Northern Arcology",
+      "short": "N.Arc",
+      "grid": [0, 0],
+      "neighbors": ["r02", "r05", "r06"],
+      "start": { "influence": 70, "infection": 0, "stability": 60 }
+    },
+    {
+      "id": "r02",
+      "name": "Coastal Spires",
+      "short": "Coast",
+      "grid": [1, 0],
+      "neighbors": ["r01", "r03", "r05", "r06", "r07"],
+      "start": { "influence": 60, "infection": 5, "stability": 55 }
+    },
+    {
+      "id": "r03",
+      "name": "Ashen Plains",
+      "short": "Ashen",
+      "grid": [2, 0],
+      "neighbors": ["r02", "r04", "r06", "r07", "r08"],
+      "start": { "influence": 20, "infection": 30, "stability": 45 }
+    },
+    {
+      "id": "r04",
+      "name": "Frozen Wastes",
+      "short": "Frost",
+      "grid": [3, 0],
+      "neighbors": ["r03", "r07", "r08"],
+      "start": { "influence": 15, "infection": 5, "stability": 50 }
+    },
+    {
+      "id": "r05",
+      "name": "Rustbelt Hubs",
+      "short": "Rust",
+      "grid": [0, 1],
+      "neighbors": ["r01", "r02", "r06", "r09"],
+      "start": { "influence": 20, "infection": 60, "stability": 35 }
+    },
+    {
+      "id": "r06",
+      "name": "Silica Valley",
+      "short": "Silica",
+      "grid": [1, 1],
+      "neighbors": ["r01", "r02", "r03", "r05", "r07", "r09", "r10", "r11"],
+      "start": { "influence": 25, "infection": 15, "stability": 55 }
+    },
+    {
+      "id": "r07",
+      "name": "Cradle of Ruins",
+      "short": "Cradle",
+      "grid": [2, 1],
+      "neighbors": ["r02", "r03", "r04", "r06", "r08", "r11", "r12"],
+      "start": { "influence": 10, "infection": 70, "stability": 30 }
+    },
+    {
+      "id": "r08",
+      "name": "The Veil",
+      "short": "Veil",
+      "grid": [3, 1],
+      "neighbors": ["r03", "r04", "r07", "r11", "r12"],
+      "start": { "influence": 5, "infection": 20, "stability": 40 }
+    },
+    {
+      "id": "r09",
+      "name": "Southern Drylands",
+      "short": "Dry",
+      "grid": [0, 2],
+      "neighbors": ["r05", "r06", "r10"],
+      "start": { "influence": 15, "infection": 10, "stability": 50 }
+    },
+    {
+      "id": "r10",
+      "name": "Sunken Archipelago",
+      "short": "Arch",
+      "grid": [1, 2],
+      "neighbors": ["r06", "r09", "r11"],
+      "start": { "influence": 10, "infection": 5, "stability": 55 }
+    },
+    {
+      "id": "r11",
+      "name": "Deep Equator",
+      "short": "Equat",
+      "grid": [2, 2],
+      "neighbors": ["r06", "r07", "r08", "r10", "r12"],
+      "start": { "influence": 15, "infection": 50, "stability": 40 }
+    },
+    {
+      "id": "r12",
+      "name": "Scorched Peaks",
+      "short": "Peaks",
+      "grid": [3, 2],
+      "neighbors": ["r07", "r08", "r11"],
+      "start": { "influence": 0, "infection": 25, "stability": 45 }
+    }
+  ]
+}

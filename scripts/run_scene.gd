@@ -10,6 +10,7 @@ const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd"
 
 @onready var turn_label: Label = $Margin/VBox/Header/TurnLabel
 @onready var chapter_label: Label = $Margin/VBox/Header/ChapterLabel
+@onready var region_map: Control = $Margin/VBox/RegionMap
 @onready var stats_label: Label = $Margin/VBox/StatePanel/StatsLabel
 @onready var event_title_label: Label = $Margin/VBox/EventPanel/EventVBox/EventTitle
 @onready var event_description_label: Label = $Margin/VBox/EventPanel/EventVBox/EventDescription
@@ -28,6 +29,7 @@ var config: Dictionary = {}
 var events_data: Array = []
 var tech_data: Array = []
 var chapter_data: Dictionary = {}
+var region_defs: Dictionary = {}
 
 var current_turn_events: Array = []
 var current_event_index: int = 0
@@ -43,6 +45,7 @@ func _ready() -> void:
 	events_data = _load_json_array("res://data/events.json")
 	tech_data = _load_json_array("res://data/techs.json")
 	chapter_data = _load_json_dict("res://data/campaign_ch1.json")
+	region_defs = _load_json_dict("res://data/regions.json")
 
 	world_simulation = WorldSimulationClass.new()
 	event_director = EventDirectorClass.new()
@@ -53,8 +56,13 @@ func _ready() -> void:
 	meta_progression.initialize(tech_data)
 	campaign_manager.initialize(chapter_data)
 	event_director.initialize(events_data)
-	world_simulation.initialize(config, meta_progression.get_run_modifiers())
+	world_simulation.initialize(config, meta_progression.get_run_modifiers(), region_defs)
 	metrics_tracker.start_run()
+
+	if region_map.has_method("build_from_snapshot"):
+		region_map.build_from_snapshot(world_simulation.regions_snapshot())
+	if region_map.has_signal("region_clicked") and not region_map.region_clicked.is_connected(_on_region_clicked):
+		region_map.region_clicked.connect(_on_region_clicked)
 
 	chapter_label.text = campaign_manager.chapter_title()
 	_start_turn()
@@ -80,7 +88,7 @@ func _start_turn() -> void:
 func _render_state() -> void:
 	turn_label.text = "Turn %d / %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
 	var s: Dictionary = world_simulation.world_state
-	stats_label.text = "Stability: %d   Influence: %d   Resources: %d   Crisis: %d   Regions: %d" % [
+	stats_label.text = "Stability: %d   Influence: %d   Resources: %d   Crisis: %d   Regions: %d / 12" % [
 		int(s.get("stability", 0)),
 		int(s.get("influence", 0)),
 		int(s.get("resources", 0)),
@@ -88,6 +96,14 @@ func _render_state() -> void:
 		int(s.get("control_regions", 0))
 	]
 	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
+	_refresh_region_map()
+
+
+func _refresh_region_map() -> void:
+	if region_map == null:
+		return
+	if region_map.has_method("refresh"):
+		region_map.refresh(world_simulation.regions_snapshot())
 
 
 func _render_current_event() -> void:
@@ -122,9 +138,15 @@ func _on_choice_selected(choice: Dictionary) -> void:
 	_render_current_event()
 
 
+func _on_region_clicked(_region_id: String) -> void:
+	# Phase 2 will use this for regional event targeting. Keep as a no-op for now.
+	pass
+
+
 func _finalize_turn() -> void:
 	world_simulation.apply_passive_turn_effects(meta_progression.get_run_modifiers())
 	world_simulation.advance_turn()
+	_refresh_region_map()
 	var evaluation: Dictionary = world_simulation.evaluate_outcome()
 	if String(evaluation.get("outcome", "ongoing")) == "ongoing":
 		_start_turn()
@@ -142,6 +164,7 @@ func _finish_run(evaluation: Dictionary) -> void:
 		"state": final_state,
 		"turn_index": evaluation.get("turn_index", 0),
 		"turns_total": evaluation.get("turns_total", 0),
+		"regions": evaluation.get("regions", []),
 		"chapter_goal_completed": chapter_goal_completed,
 		"chapter_id": campaign_manager.chapter_id(),
 		"chapter_title": campaign_manager.chapter_title()
