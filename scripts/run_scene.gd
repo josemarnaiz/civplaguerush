@@ -16,6 +16,7 @@ const LOSS_ALERT_VOLUME_DB: float = -9.0
 @onready var stat_influence: Label = $Margin/VBox/StatePanel/StatsBox/Influence/Value
 @onready var stat_resources: Label = $Margin/VBox/StatePanel/StatsBox/Resources/Value
 @onready var stat_crisis: Label = $Margin/VBox/StatePanel/StatsBox/Crisis/Value
+@onready var stat_crisis_row: HBoxContainer = $Margin/VBox/StatePanel/StatsBox/Crisis
 @onready var stat_control: Label = $Margin/VBox/StatePanel/StatsBox/Control/Value
 @onready var event_panel: PanelContainer = $Margin/VBox/EventPanel
 @onready var event_row: HBoxContainer = $Margin/VBox/EventPanel/EventRow
@@ -163,6 +164,10 @@ func _render_state() -> void:
 	elif crisis >= 30:
 		crisis_col = Color(0.780, 0.604, 0.235, 1.0)        # O3 signature gold
 	stat_crisis.add_theme_color_override("font_color", crisis_col)
+	# Above the alarm threshold we pulse the whole Crisis row's modulate so
+	# the player feels the danger even peripherally. Below threshold, we let
+	# any lingering alarm tween decay back to 1.0.
+	_update_crisis_alarm(crisis)
 
 	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
 	_refresh_region_map()
@@ -222,6 +227,35 @@ func _refresh_region_map() -> void:
 		return
 	if region_map.has_method("refresh"):
 		region_map.refresh(world_simulation.regions_snapshot())
+
+
+# When crisis crosses 50 we pulse the whole row so the player can't miss it;
+# the existing Value label colour ramp already handles <30 and 30-49.
+# We keep a single sticky tween on the row: start it on rising edge, stop and
+# reset modulate when crisis drops back under threshold.
+const _CRISIS_ALARM_THRESHOLD: int = 50
+var _crisis_alarm_active: bool = false
+
+func _update_crisis_alarm(crisis: int) -> void:
+	if not is_instance_valid(stat_crisis_row):
+		return
+	var should_alarm: bool = crisis >= _CRISIS_ALARM_THRESHOLD
+	if should_alarm and not _crisis_alarm_active:
+		_crisis_alarm_active = true
+		var tw := create_tween()
+		tw.set_loops()
+		tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(stat_crisis_row, "modulate", Color(1.15, 0.80, 0.80, 1.0), 0.55)
+		tw.tween_property(stat_crisis_row, "modulate", Color(1.00, 1.00, 1.00, 1.0), 0.55)
+		stat_crisis_row.set_meta("alarm_tw", tw)
+	elif not should_alarm and _crisis_alarm_active:
+		_crisis_alarm_active = false
+		var existing: Tween = stat_crisis_row.get_meta("alarm_tw", null)
+		if existing is Tween and existing.is_valid():
+			existing.kill()
+		var cooldown := create_tween()
+		cooldown.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		cooldown.tween_property(stat_crisis_row, "modulate", Color(1, 1, 1, 1), 0.25)
 
 
 func _render_current_event() -> void:

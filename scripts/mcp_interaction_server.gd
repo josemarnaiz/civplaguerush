@@ -366,6 +366,14 @@ func _cmd_click(params: Dictionary) -> void:
 	var y: float = float(params.get("y", 0))
 	var button: int = int(params.get("button", MOUSE_BUTTON_LEFT))
 
+	# Hard-guard against MOUSE_BUTTON_NONE (0). Godot's internal
+	# mouse_button_to_mask(button) floods the error log with
+	# "Condition \"button == MouseButton::NONE\" is true" whenever we inject an
+	# event with button_index == 0 (see BUG-010). Upstream callers that forget
+	# to pass `button` now get a safe LEFT-click instead of log spam.
+	if button <= MOUSE_BUTTON_NONE:
+		button = MOUSE_BUTTON_LEFT
+
 	var pos: Vector2 = Vector2(x, y)
 
 	# Mouse button press
@@ -1329,6 +1337,10 @@ func _cmd_mouse_drag(params: Dictionary) -> void:
 	var to_x: float = float(params.get("to_x", 0))
 	var to_y: float = float(params.get("to_y", 0))
 	var button: int = int(params.get("button", MOUSE_BUTTON_LEFT))
+	# See BUG-010: guard against MOUSE_BUTTON_NONE so drag events don't spam
+	# the engine error log with "button == MouseButton::NONE".
+	if button <= MOUSE_BUTTON_NONE:
+		button = MOUSE_BUTTON_LEFT
 	var steps: int = int(params.get("steps", 10))
 	if steps < 1:
 		steps = 1

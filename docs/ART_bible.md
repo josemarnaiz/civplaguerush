@@ -509,3 +509,18 @@ el jugador *ve* el contador subir/bajar y no solo ve un valor diferente:
 - El stat floater (9.1) sigue siendo el feedback "grueso" por decisión; el
   count-up es la continuidad "fina" del HUD. Juntos crean la sensación de
   un tablero que responde, no un text-box que se reescribe.
+
+### 9.12 Crisis alarm sobre la fila de Crisis (`_update_crisis_alarm`)
+Cuando `crisis ≥ 50` (el umbral de derrota por defecto del juego), la
+fila entera del HUD "Crisis" empieza a respirar entre modulate
+`(1.0, 1.0, 1.0)` y `(1.15, 0.80, 0.80)` a ~0.9 Hz:
+
+- **Rising edge** (cruza 50 subiendo) → arranca un loop sine 0.55 s in/out
+  que tinta la fila hacia rojo cálido sin perder el pixel-art.
+- **Falling edge** (cae bajo 50) → se mata el loop y una cooldown tween
+  lleva modulate a blanco en 0.25 s (no desaparece de golpe).
+- El flag `_crisis_alarm_active` evita reiniciar el tween cada frame y
+  `meta("alarm_tw")` asegura que `kill()` corta el loop al bajar.
+
+Es compatible con `_tween_stat_number` (9.11) porque uno modifica `text`
+y el otro `modulate` de padre: no pelean por la misma propiedad.
