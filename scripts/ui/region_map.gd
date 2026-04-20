@@ -4,9 +4,6 @@ signal region_clicked(region_id: String)
 signal region_hovered(region_id: String)
 
 const CONTROL_THRESHOLD: int = 60
-const COL_COUNT: int = 4
-const ROW_COUNT: int = 3
-const VERT_COUNT: int = 11
 
 # Ashen Fresco palette — see docs/ART_bible.md.
 # Colors map to: D1 (background), D2 (shadow), B1 (ocean deep), R2 (rival),
@@ -75,18 +72,70 @@ const COMPASS_ROSE_PATH: String = "res://assets/art/map/compass_rose.png"
 const INFECTION_TILE_SIZE: float = 32.0
 const COMPASS_SIZE: float = 56.0
 
-# Continent layout: each entry is [row_index, [col_group_a, col_group_b, ...]].
-# Every col_group is a list of column indices that share a landmass; between
-# groups there is open sea. This converts the 4x3 grid of regions into an
-# Earth-like arrangement of three latitudinal continents with inner seas.
-const CONTINENT_LAYOUT: Array = [
-	[0, [[0, 1, 2, 3]]],          # Northern continent: full-width (Eurasia-like)
-	[1, [[0, 1], [2, 3]]],        # Equatorial: Western Reach + Eastern Marches with Atlantic-like gap
-	[2, [[0], [1], [2, 3]]],      # Southern: Drylands island, Archipelago, Equator-Peaks continent
+# --- Continental layout (Middle-earth style) ------------------------------
+# The map is a single irregular landmass plus a small offshore archipelago
+# for r10. Region polygons are carved via a Voronoi partition of hand-picked
+# seed points clipped by the continent silhouette, so regions share organic
+# boundaries instead of sitting on a visible grid.
+#
+# Outline anchor points (clockwise) — Catmull-Rom-smoothed and sine-wobbled at
+# runtime to produce a painted coastline with ~120 samples.
+const CONTINENT_OUTLINE: Array = [
+	Vector2(0.10, 0.14),  # NW headland
+	Vector2(0.17, 0.08),
+	Vector2(0.27, 0.05),
+	Vector2(0.37, 0.04),
+	Vector2(0.46, 0.06),
+	Vector2(0.54, 0.04),
+	Vector2(0.62, 0.06),
+	Vector2(0.71, 0.09),  # NE cape
+	Vector2(0.80, 0.13),
+	Vector2(0.86, 0.20),
+	Vector2(0.88, 0.29),
+	Vector2(0.85, 0.37),
+	Vector2(0.88, 0.44),  # east bulge
+	Vector2(0.90, 0.51),
+	Vector2(0.87, 0.58),
+	Vector2(0.84, 0.64),
+	Vector2(0.86, 0.70),
+	Vector2(0.82, 0.76),
+	Vector2(0.75, 0.81),
+	Vector2(0.66, 0.85),
+	Vector2(0.57, 0.87),
+	Vector2(0.48, 0.89),
+	Vector2(0.39, 0.87),
+	Vector2(0.31, 0.84),
+	Vector2(0.23, 0.79),
+	Vector2(0.17, 0.73),
+	Vector2(0.12, 0.65),
+	Vector2(0.08, 0.56),
+	Vector2(0.06, 0.47),
+	Vector2(0.08, 0.38),
+	Vector2(0.05, 0.29),
+	Vector2(0.08, 0.20),
 ]
-const COAST_SAMPLES_PER_COL: int = 12
-const COAST_AMPLITUDE: float = 0.022
-const SIDE_COAST_INDENT: float = 0.014
+
+# Per-region Voronoi seed (normalized 0..1). r10 is handled as an offshore
+# archipelago and is NOT part of the Voronoi partition.
+const REGION_SEEDS: Dictionary = {
+	"r04": Vector2(0.28, 0.15),  # tundra — frozen north-west
+	"r05": Vector2(0.52, 0.14),  # factory — dwarven north-center
+	"r03": Vector2(0.73, 0.22),  # wasteland — dust bowl north-east
+	"r02": Vector2(0.14, 0.38),  # coast — western shoreline
+	"r08": Vector2(0.34, 0.37),  # veil — hidden forest west-center
+	"r06": Vector2(0.56, 0.34),  # tech — valley city center
+	"r07": Vector2(0.78, 0.44),  # ruins — eastern ruined empire
+	"r01": Vector2(0.39, 0.56),  # arcology — capital south-center
+	"r09": Vector2(0.61, 0.58),  # drylands — east-central plains
+	"r12": Vector2(0.76, 0.68),  # volcano — south-east Mount Ash
+	"r11": Vector2(0.48, 0.76),  # jungle — deep south
+	"r10": Vector2(0.11, 0.80),  # islands — SW offshore (special-cased)
+}
+
+const OFFSHORE_IDS: Dictionary = { "r10": true }
+
+const COASTLINE_SAMPLES: int = 144
+const VORONOI_RAYS: int = 80
 
 var _snapshot: Array = []
 var _polygons: Dictionary = {}        # id -> Array[PackedVector2Array] (normalized 0..1)
@@ -220,234 +269,218 @@ func _generate_polygons() -> void:
 	_continent_internal_borders.clear()
 	_ocean_islets.clear()
 
-	# Build a lookup: (col, row) -> region_id, so we can map grid cells to data.
-	var grid_to_id: Dictionary = {}
+	# Build the main landmass silhouette once, via Catmull-Rom-smoothed,
+	# sine-wobbled outline. This is the coast that anchors every on-continent
+	# region's Voronoi cell.
+	var outline: PackedVector2Array = _wobble_resample_outline(CONTINENT_OUTLINE, COASTLINE_SAMPLES)
+	_continent_exteriors.append(outline)
+
+	# Partition the snapshot into on-continent vs offshore regions.
+	var on_continent_ids: Array = []
+	for id in REGION_SEEDS.keys():
+		if OFFSHORE_IDS.has(id):
+			continue
+		on_continent_ids.append(String(id))
+
+	# Carve each on-continent region as a Voronoi cell clipped to the outline.
+	# Rays cast from the seed are capped by the nearest bisector of any other
+	# seed, then by the outline, then wobbled with a per-region phase so the
+	# internal boundaries read as organic painted contours rather than clean
+	# geometric lines.
+	for id in on_continent_ids:
+		var seed: Vector2 = REGION_SEEDS[id]
+		var seed_hash: float = float(id.hash() & 0xFFFFFF) * 0.0000001
+		var poly: PackedVector2Array = PackedVector2Array()
+		for i in range(VORONOI_RAYS):
+			var ang: float = TAU * float(i) / float(VORONOI_RAYS)
+			var dir: Vector2 = Vector2(cos(ang), sin(ang))
+			var t_max: float = 10.0
+			# Bisector clipping against every other on-continent seed.
+			for oid in on_continent_ids:
+				if oid == id:
+					continue
+				var q: Vector2 = REGION_SEEDS[oid]
+				var to_q: Vector2 = q - seed
+				var denom: float = to_q.dot(dir)
+				if denom > 0.00001:
+					var t: float = 0.5 * to_q.length_squared() / denom
+					if t > 0.0 and t < t_max:
+						t_max = t
+			# Outline clipping: never extend past the continent's coast.
+			var t_out: float = _ray_outline_distance(seed, dir, outline)
+			if t_out > 0.0 and t_out < t_max:
+				t_max = t_out
+			# Micro inset so adjacent polygons do not fight for the same pixel.
+			t_max = maxf(0.006, t_max - 0.0025)
+			var wobble: float = (
+				sin(ang * 3.0 + seed_hash * 31.0) * 0.017
+				+ sin(ang * 7.0 + seed_hash * 71.0) * 0.009
+				+ sin(ang * 13.0 + seed_hash * 113.0) * 0.004
+			)
+			var dist: float = t_max * (1.0 + wobble)
+			poly.append(seed + dir * dist)
+		_polygons[id] = [poly]
+		_centroids[id] = seed
+
+	# Internal political borders: each pair of adjacent seeds shares a
+	# bisector segment that we sample into a polyline (clipped approximately
+	# by their common Voronoi-bounded length) for the gold dashed overlay.
+	var seen: Dictionary = {}
 	for r in _snapshot:
-		var grid: Array = r.get("grid", [0, 0])
-		grid_to_id[Vector2i(int(grid[0]), int(grid[1]))] = String(r.get("id", ""))
-
-	var pad_x: float = 0.055
-	var pad_y: float = 0.08
-	var col_w: float = (1.0 - 2.0 * pad_x) / float(COL_COUNT)
-	var row_h: float = (1.0 - 2.0 * pad_y) / float(ROW_COUNT)
-
-	for layout in CONTINENT_LAYOUT:
-		var row: int = int(layout[0])
-		var groups: Array = layout[1]
-		for group in groups:
-			var ids: Array = []
-			for col in group:
-				var key := Vector2i(int(col), row)
-				ids.append(String(grid_to_id.get(key, "")))
-			# Skip groups that have no matching regions in the snapshot.
-			var has_any: bool = false
-			for gid in ids:
-				if String(gid) != "":
-					has_any = true
-					break
-			if not has_any:
+		var a: String = String(r.get("id", ""))
+		if not REGION_SEEDS.has(a) or OFFSHORE_IDS.has(a):
+			continue
+		for n in r.get("neighbors", []):
+			var b: String = String(n)
+			if a == b or not REGION_SEEDS.has(b) or OFFSHORE_IDS.has(b):
 				continue
+			var key: String = (a + "|" + b) if a < b else (b + "|" + a)
+			if seen.has(key):
+				continue
+			seen[key] = true
+			var border: PackedVector2Array = _bisector_segment(
+				REGION_SEEDS[a], REGION_SEEDS[b], on_continent_ids, outline)
+			if border.size() >= 2:
+				_continent_internal_borders.append(border)
 
-			var y_top: float = pad_y + float(row) * row_h + 0.012
-			var y_bot: float = pad_y + float(row + 1) * row_h - 0.012
-			var x_left: float = pad_x + float(int(group[0])) * col_w + 0.006
-			var x_right: float = pad_x + float(int(group[-1]) + 1) * col_w - 0.006
-
-			if row == 2 and group.size() == 1 and int(group[0]) == 1:
-				# Sunken Archipelago -> 3 small islands inside the sea gap.
-				_build_archipelago(String(ids[0]), x_left, x_right, y_top, y_bot)
-			else:
-				_build_continent(ids, group, row, x_left, x_right, y_top, y_bot)
+	# Offshore archipelago for r10: three small islands around its seed point,
+	# each registered as its own exterior polyline so the shoreline stroke and
+	# shelf halo both draw properly.
+	for oid in REGION_SEEDS.keys():
+		if not OFFSHORE_IDS.has(oid):
+			continue
+		_build_offshore_archipelago(String(oid), REGION_SEEDS[oid])
 
 	_generate_ocean_islets()
 
 
-func _build_continent(ids: Array, cols: Array, row: int,
-		x_left: float, x_right: float, y_top: float, y_bot: float) -> void:
-	var n_cols: int = ids.size()
-	var samples: int = n_cols * COAST_SAMPLES_PER_COL
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("cont_%d_%d_%d" % [row, int(cols[0]), int(cols[-1])])
+# --- Continent outline helpers --------------------------------------------
 
-	# Coast phase offsets so each continent has a unique shoreline signature.
-	var ph_tL: float = rng.randf() * TAU    # long (continental) wave
-	var ph_tM: float = rng.randf() * TAU    # medium coastline
-	var ph_tS: float = rng.randf() * TAU    # fine detail
-	var ph_bL: float = rng.randf() * TAU
-	var ph_bM: float = rng.randf() * TAU
-	var ph_bS: float = rng.randf() * TAU
-
-	# Latitude-dependent amplitude: arctic continents have jaggier shorelines;
-	# tropical bulge downward. Also scale long-wave amplitude by group width so
-	# wider continents can have bigger continental curves.
-	var group_width: float = x_right - x_left
-	var amp_long: float = clampf(group_width * 0.09, 0.018, 0.055)
-	var amp_medium: float = 0.014
-	var amp_small: float = 0.006
-	if row == 0:
-		amp_medium *= 1.20
-		amp_small *= 1.25
-	elif row == 2:
-		amp_long *= 1.10
-
-	# Continental axis curve: a single slow sine shared by top and bottom
-	# shifts the whole continent up or down along its length, so the landmass
-	# actually bends instead of looking like a horizontal brick. Phase offsets
-	# are per-continent so each has a distinct shape.
-	var axis_phase: float = rng.randf() * TAU
-	var axis_amp: float = clampf(group_width * 0.08, 0.010, 0.040)
-
-	# ---- Build top & bottom wavy coastlines as two parallel arrays --------
-	var top_coast: PackedVector2Array = PackedVector2Array()
-	var bot_coast: PackedVector2Array = PackedVector2Array()
-	for i in range(samples + 1):
+func _wobble_resample_outline(anchors: Array, samples: int) -> PackedVector2Array:
+	var n: int = anchors.size()
+	var out: PackedVector2Array = PackedVector2Array()
+	var seed_offset: float = 19.7
+	for i in range(samples):
 		var t: float = float(i) / float(samples)
-		var x: float = lerpf(x_left, x_right, t)
-		# Taper the outer 12% so the coast meets the side coast smoothly; the
-		# interior keeps the full amplitude for a natural continental outline.
-		var edge_taper: float = smoothstep(0.0, 0.12, t) * smoothstep(0.0, 0.12, 1.0 - t)
-		# Shared bend of the continent's vertical axis (positive = lower).
-		var axis_shift: float = sin(t * PI * 1.0 + axis_phase) * axis_amp * 0.55 \
-				+ sin(t * PI * 2.0 + axis_phase * 1.7) * axis_amp * 0.20
-		# Independent wavy coastlines (top lifts, bottom drops).
-		var long_t: float = sin(t * TAU * 0.75 + ph_tL) * amp_long
-		var long_b: float = sin(t * TAU * 0.70 + ph_bL + 1.3) * amp_long * 0.9
-		var dy_top: float = (
-				long_t
-				+ sin(t * TAU * 2.2 + ph_tM) * amp_medium
-				+ sin(t * TAU * 4.7 + ph_tS) * amp_small
-			) * edge_taper
-		var dy_bot: float = (
-				long_b
-				+ sin(t * TAU * 2.0 + ph_bM) * amp_medium
-				+ sin(t * TAU * 4.1 + ph_bS) * amp_small
-			) * edge_taper
-		top_coast.append(Vector2(x, y_top + axis_shift - dy_top))
-		bot_coast.append(Vector2(x, y_bot + axis_shift + dy_bot))
-
-	# ---- West and East side coasts (curvy vertical segments) --------------
-	var west_coast: PackedVector2Array = PackedVector2Array()
-	var east_coast: PackedVector2Array = PackedVector2Array()
-	var side_steps: int = 6
-	for i in range(1, side_steps):
-		var tv: float = float(i) / float(side_steps)
-		var y_west: float = lerpf(top_coast[0].y, bot_coast[0].y, tv)
-		var y_east: float = lerpf(top_coast[-1].y, bot_coast[-1].y, tv)
-		var dx_w: float = sin(tv * PI * 1.5 + ph_tL) * SIDE_COAST_INDENT * rng.randf_range(0.6, 1.3)
-		var dx_e: float = sin(tv * PI * 1.5 + ph_bL) * SIDE_COAST_INDENT * rng.randf_range(0.6, 1.3)
-		west_coast.append(Vector2(x_left - abs(dx_w), y_west))   # bulge outward left
-		east_coast.append(Vector2(x_right + abs(dx_e), y_east))  # bulge outward right
-
-	# ---- Build one polygon per region using shared boundary points --------
-	for i in range(n_cols):
-		var id: String = String(ids[i])
-		if id == "":
-			continue
-		var j0: int = i * COAST_SAMPLES_PER_COL
-		var j1: int = (i + 1) * COAST_SAMPLES_PER_COL
-
-		var poly: PackedVector2Array = PackedVector2Array()
-
-		# Top edge (left -> right)
-		for j in range(j0, j1 + 1):
-			poly.append(top_coast[j])
-
-		# Right side
-		if i == n_cols - 1:
-			# Exterior east coast (runs top -> bottom)
-			for p in east_coast:
-				poly.append(p)
-		else:
-			# Shared internal boundary with the next region: slightly jittered
-			# vertical line so it doesn't look like a ruler. Jitter is seeded
-			# from the boundary position to stay stable across frames.
-			var x_b: float = top_coast[j1].x
-			var rng_b := RandomNumberGenerator.new()
-			rng_b.seed = hash("ib_%d_%s" % [row, id])
-			for k in range(1, 4):
-				var ty: float = float(k) / 4.0
-				var y_b: float = lerpf(top_coast[j1].y, bot_coast[j1].y, ty)
-				var dx_b: float = rng_b.randf_range(-0.003, 0.003)
-				poly.append(Vector2(x_b + dx_b, y_b))
-
-		# Bottom edge (right -> left)
-		for j in range(j1, j0 - 1, -1):
-			poly.append(bot_coast[j])
-
-		# Left side
-		if i == 0:
-			# Exterior west coast (runs bottom -> top)
-			for ki in range(west_coast.size() - 1, -1, -1):
-				poly.append(west_coast[ki])
-		else:
-			var x_bl: float = top_coast[j0].x
-			var rng_bl := RandomNumberGenerator.new()
-			rng_bl.seed = hash("ib_l_%d_%s" % [row, id])
-			for k in range(3, 0, -1):
-				var ty2: float = float(k) / 4.0
-				var y_bl: float = lerpf(top_coast[j0].y, bot_coast[j0].y, ty2)
-				var dx_bl: float = rng_bl.randf_range(-0.003, 0.003)
-				poly.append(Vector2(x_bl + dx_bl, y_bl))
-
-		_polygons[id] = [poly]
-
-		# Centroid = bbox mid of this column segment (offset down slightly so
-		# the biome icon floats above the visual center and labels sit below).
-		var cx: float = (top_coast[j0].x + top_coast[j1].x) * 0.5
-		var cy_top: float = (top_coast[j0].y + top_coast[j1].y) * 0.5
-		var cy_bot: float = (bot_coast[j0].y + bot_coast[j1].y) * 0.5
-		_centroids[id] = Vector2(cx, (cy_top + cy_bot) * 0.5)
-
-	# ---- Store continent's exterior coastline for overlay rendering ------
-	var exterior: PackedVector2Array = PackedVector2Array()
-	for p in top_coast:
-		exterior.append(p)
-	for p in east_coast:
-		exterior.append(p)
-	for j in range(bot_coast.size() - 1, -1, -1):
-		exterior.append(bot_coast[j])
-	for ki2 in range(west_coast.size() - 1, -1, -1):
-		exterior.append(west_coast[ki2])
-	exterior.append(top_coast[0])  # close the loop
-	_continent_exteriors.append(exterior)
-
-	# ---- Store internal political borders as line segments ---------------
-	for i in range(1, n_cols):
-		var j_border: int = i * COAST_SAMPLES_PER_COL
-		var border: PackedVector2Array = PackedVector2Array()
-		var steps: int = 6
-		for k in range(steps + 1):
-			var tv: float = float(k) / float(steps)
-			var y: float = lerpf(top_coast[j_border].y, bot_coast[j_border].y, tv)
-			border.append(Vector2(top_coast[j_border].x, y))
-		_continent_internal_borders.append(border)
+		var idx_f: float = t * float(n)
+		var i0: int = int(floor(idx_f)) % n
+		var i1: int = (i0 + 1) % n
+		var i_prev: int = (i0 - 1 + n) % n
+		var i_next: int = (i1 + 1) % n
+		var u: float = idx_f - floor(idx_f)
+		var pt: Vector2 = _catmull_rom(anchors[i_prev], anchors[i0], anchors[i1], anchors[i_next], u)
+		# Wobble along the smoothed tangent's normal so the coast keeps its
+		# overall shape but picks up painterly irregularities.
+		var tangent: Vector2 = (Vector2(anchors[i1]) - Vector2(anchors[i0])).normalized()
+		var normal: Vector2 = Vector2(-tangent.y, tangent.x)
+		var wobble: float = (
+			sin(t * TAU * 7.0 + seed_offset) * 0.008
+			+ sin(t * TAU * 17.0 + seed_offset * 1.7) * 0.004
+			+ sin(t * TAU * 33.0 + seed_offset * 2.3) * 0.002
+		)
+		out.append(pt + normal * wobble)
+	out.append(out[0])
+	return out
 
 
-func _build_archipelago(id: String, x_left: float, x_right: float,
-		y_top: float, y_bot: float) -> void:
+func _catmull_rom(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
+	var t2: float = t * t
+	var t3: float = t2 * t
+	return 0.5 * (
+		(2.0 * p1)
+		+ (-p0 + p2) * t
+		+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+		+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+	)
+
+
+func _ray_outline_distance(origin: Vector2, dir: Vector2, outline: PackedVector2Array) -> float:
+	var far_point: Vector2 = origin + dir * 10.0
+	var best: float = -1.0
+	for i in range(outline.size() - 1):
+		var hit: Variant = Geometry2D.segment_intersects_segment(
+			origin, far_point, outline[i], outline[i + 1])
+		if hit != null:
+			var t: float = (Vector2(hit) - origin).dot(dir)
+			if t > 0.0001 and (best < 0.0 or t < best):
+				best = t
+	return best
+
+
+func _bisector_segment(a: Vector2, b: Vector2, on_continent_ids: Array,
+		outline: PackedVector2Array) -> PackedVector2Array:
+	# The bisector line is perpendicular to (b-a) through the midpoint. We
+	# walk it outward in both directions from the midpoint and stop when we
+	# cross another seed's territory or hit the outline.
+	var mid: Vector2 = (a + b) * 0.5
+	var axis: Vector2 = (b - a).normalized()
+	var normal: Vector2 = Vector2(-axis.y, axis.x)
+	# Sample length along the bisector on each side.
+	var steps: int = 10
+	var half_span: float = 0.10
+	var result: PackedVector2Array = PackedVector2Array()
+	# Walk from one extreme (-half_span) to the other (+half_span).
+	var limit_neg: float = _bisector_walk_limit(mid, -normal, a, b, half_span, on_continent_ids, outline)
+	var limit_pos: float = _bisector_walk_limit(mid, normal, a, b, half_span, on_continent_ids, outline)
+	var start: Vector2 = mid - normal * limit_neg
+	var end: Vector2 = mid + normal * limit_pos
+	for i in range(steps + 1):
+		var t: float = float(i) / float(steps)
+		var pt: Vector2 = start.lerp(end, t)
+		# Small jitter so the gold dashed line doesn't look CAD-perfect.
+		var jitter: float = sin(t * TAU * 3.0 + a.x * 31.0 + b.y * 47.0) * 0.003
+		pt += axis * jitter
+		result.append(pt)
+	return result
+
+
+func _bisector_walk_limit(mid: Vector2, dir: Vector2, a: Vector2, b: Vector2,
+		max_len: float, on_continent_ids: Array, outline: PackedVector2Array) -> float:
+	# Walk from mid in direction dir until we either hit the outline or the
+	# point becomes closer to a seed that isn't a or b (meaning we've entered
+	# another region's territory).
+	var steps: int = 24
+	for i in range(1, steps + 1):
+		var t: float = max_len * float(i) / float(steps)
+		var pt: Vector2 = mid + dir * t
+		# Outline check: is the point still inside the continent?
+		if not Geometry2D.is_point_in_polygon(pt, outline):
+			return max_len * float(i - 1) / float(steps)
+		# Voronoi check: closest seed must be a or b.
+		var d_a: float = pt.distance_squared_to(a)
+		var d_b: float = pt.distance_squared_to(b)
+		var best: float = minf(d_a, d_b)
+		for oid in on_continent_ids:
+			var q: Vector2 = REGION_SEEDS[oid]
+			if q == a or q == b:
+				continue
+			var d_q: float = pt.distance_squared_to(q)
+			if d_q < best:
+				return max_len * float(i - 1) / float(steps)
+	return max_len
+
+
+func _build_offshore_archipelago(id: String, center: Vector2) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("arch_" + id)
-	var cx_mid: float = (x_left + x_right) * 0.5
-	var cy_mid: float = (y_top + y_bot) * 0.5
-	# Three islands arranged like a crooked archipelago: NW, E, S.
+	# Three tight islands clustered around the seed with irregular silhouettes.
 	var offsets: Array = [
-		[Vector2(-0.045, -0.030), 0.048, 0.028],
-		[Vector2( 0.050,  0.004), 0.040, 0.026],
-		[Vector2(-0.012,  0.042), 0.044, 0.028],
+		[Vector2(-0.025, -0.028), 0.040, 0.024],
+		[Vector2( 0.030, -0.004), 0.036, 0.022],
+		[Vector2(-0.010,  0.032), 0.038, 0.022],
 	]
 	var shapes: Array = []
 	for off_data in offsets:
 		var off: Vector2 = off_data[0]
 		var rx: float = off_data[1]
 		var ry: float = off_data[2]
-		shapes.append(_organic_blob(Vector2(cx_mid + off.x, cy_mid + off.y), rx, ry, rng, 9))
-		# Add each island's silhouette as its own exterior polyline so it gets
-		# the dark shoreline treatment.
-		var exterior: PackedVector2Array = PackedVector2Array(shapes[-1])
-		exterior.append(shapes[-1][0])
+		var blob: PackedVector2Array = _organic_blob(center + off, rx, ry, rng, 9)
+		shapes.append(blob)
+		var exterior: PackedVector2Array = PackedVector2Array(blob)
+		exterior.append(blob[0])
 		_continent_exteriors.append(exterior)
 	_polygons[id] = shapes
-	_centroids[id] = Vector2(cx_mid - 0.003, cy_mid)
+	_centroids[id] = center
 
 
 func _generate_ocean_islets() -> void:
