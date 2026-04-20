@@ -1,7 +1,4 @@
-"""Composite preview of all UI assets at 3x zoom — validation/mockup tool.
-
-Output: assets/art/ui/_preview.png (not referenced by the game, just for review)
-"""
+"""Composite preview of all UI + icon assets at 4x zoom."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,11 +10,11 @@ from primitives import fill_rect, new_image
 
 ART_DIR = Path(__file__).resolve().parents[2] / "assets" / "art"
 OUT = ART_DIR / "ui" / "_preview.png"
-ZOOM = 3
+ZOOM = 4
 
 
-def _load(name: str) -> Image.Image:
-    return Image.open(ART_DIR / "ui" / name).convert("RGBA")
+def _load(folder: str, name: str) -> Image.Image:
+    return Image.open(ART_DIR / folder / name).convert("RGBA")
 
 
 def _scale(img: Image.Image, z: int = ZOOM) -> Image.Image:
@@ -26,18 +23,14 @@ def _scale(img: Image.Image, z: int = ZOOM) -> Image.Image:
 
 def _stretch_9slice(img: Image.Image, target_w: int, target_h: int,
                     slice_px: int) -> Image.Image:
-    """Godot-style 9-slice stretch at source pixel resolution (no scaling yet)."""
     sw, sh = img.size
     s = slice_px
     out = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-
-    # Corners
     out.paste(img.crop((0, 0, s, s)), (0, 0))
     out.paste(img.crop((sw - s, 0, sw, s)), (target_w - s, 0))
     out.paste(img.crop((0, sh - s, s, sh)), (0, target_h - s))
     out.paste(img.crop((sw - s, sh - s, sw, sh)), (target_w - s, target_h - s))
 
-    # Edges (tile the source edge over the stretched target edge)
     src_top = img.crop((s, 0, sw - s, s))
     src_bot = img.crop((s, sh - s, sw - s, sh))
     src_lef = img.crop((0, s, s, sh - s))
@@ -45,7 +38,6 @@ def _stretch_9slice(img: Image.Image, target_w: int, target_h: int,
     dst_edge_w = target_w - 2 * s
     dst_edge_h = target_h - 2 * s
 
-    # For clean art we tile horizontally/vertically rather than stretch
     def tile(src: Image.Image, w: int, h: int) -> Image.Image:
         t = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         if src.width == 0 or src.height == 0:
@@ -60,35 +52,47 @@ def _stretch_9slice(img: Image.Image, target_w: int, target_h: int,
     out.paste(tile(src_lef, s, dst_edge_h), (0, s))
     out.paste(tile(src_rig, s, dst_edge_h), (target_w - s, s))
 
-    # Center (stretched)
     center = img.crop((s, s, sw - s, sh - s))
     out.paste(center.resize((dst_edge_w, dst_edge_h), Image.NEAREST), (s, s))
     return out
 
 
 def build_preview() -> Path:
-    canvas_w, canvas_h = 760, 360
+    canvas_w, canvas_h = 420, 260
     canvas = new_image(canvas_w, canvas_h, c("D1"))
 
-    # Title bar area (just background gradient effect with D2)
-    fill_rect(canvas, 0, 0, canvas_w - 1, 24, c("D2"))
+    fill_rect(canvas, 0, 0, canvas_w - 1, 14, c("D2"))
 
-    # Stretched panel showcases on left (200x120 light) and right (200x120 dark)
-    panel_light = _stretch_9slice(_load("panel_frame.png"), 200, 120, 16)
-    panel_dark = _stretch_9slice(_load("panel_frame_dark.png"), 200, 120, 16)
-    canvas.paste(panel_light, (20, 40), panel_light)
-    canvas.paste(panel_dark, (240, 40), panel_dark)
+    # Panels
+    panel_light = _stretch_9slice(_load("ui", "panel_frame.png"), 180, 80, 16)
+    panel_dark = _stretch_9slice(_load("ui", "panel_frame_dark.png"), 180, 80, 16)
+    canvas.paste(panel_light, (16, 24), panel_light)
+    canvas.paste(panel_dark, (220, 24), panel_dark)
 
-    # Buttons: two sizes (96 native, 160 stretched)
-    button_files = ["button_normal.png", "button_hover.png",
-                    "button_pressed.png", "button_disabled.png"]
-    y = 180
-    for i, name in enumerate(button_files):
-        btn = Image.open(ART_DIR / "ui" / name).convert("RGBA")
-        x = 20 + i * 180
-        canvas.paste(btn, (x, y), btn)
-        stretched = _stretch_9slice(btn, 160, 28, 12)
-        canvas.paste(stretched, (x, y + 40), stretched)
+    # Icons row — each icon in a small dark panel with a stat bar
+    icon_names = ["stat_influence.png", "stat_resources.png", "stat_crisis.png",
+                  "stat_stability.png", "stat_control.png"]
+    labels = ["INF", "RES", "CRS", "STB", "CTR"]
+    icon_y = 120
+    for i, (iname, label) in enumerate(zip(icon_names, labels)):
+        x = 16 + i * 80
+        bg = _stretch_9slice(_load("ui", "panel_frame_dark.png"), 70, 40, 16)
+        canvas.paste(bg, (x, icon_y), bg)
+        icon = _load("icons", iname)
+        canvas.paste(icon, (x + 4, icon_y + 4), icon)
+
+    # Buttons row — stretched
+    btn_y = 180
+    for i, name in enumerate(["button_normal.png", "button_hover.png",
+                              "button_pressed.png", "button_disabled.png"]):
+        btn = _stretch_9slice(_load("ui", name), 96, 28, 12)
+        canvas.paste(btn, (16 + i * 100, btn_y), btn)
+
+    # Larger stretched button (dialog action)
+    big = _stretch_9slice(_load("ui", "button_normal.png"), 200, 32, 12)
+    canvas.paste(big, (16, 220), big)
+    big2 = _stretch_9slice(_load("ui", "button_hover.png"), 200, 32, 12)
+    canvas.paste(big2, (220, 220), big2)
 
     final = _scale(canvas, ZOOM)
     final.save(OUT)

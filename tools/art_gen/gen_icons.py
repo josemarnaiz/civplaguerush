@@ -126,13 +126,9 @@ def chalice() -> Image.Image:
 
 def skull() -> Image.Image:
     img = new_image(SZ, SZ)
-    # Cranium: rounded top, approx circle
-    # Draw an oval cranium from y=4..18, x=8..23
-    cranium_top_y = 4
-    cranium_bot_y = 18
+    # Cranium: oval centered at (15, 11), radii (8, 7)
     cx, cy = 15, 11
     rx, ry = 8, 7
-    # Plot oval outline + fill
     for y in range(SZ):
         for x in range(SZ):
             dx = (x - cx) / rx
@@ -143,52 +139,48 @@ def skull() -> Image.Image:
             elif d <= 1.22:
                 put(img, x, y, c("D0"))
 
-    # Eye sockets: two dark ovals
-    for ex in (11, 19):
-        fill_rect(img, ex - 2, 10, ex + 1, 13, c("D0"))
-        fill_rect(img, ex - 1, 11, ex, 12, c("D2"))
-    # Nasal triangle (inverted triangle below eyes)
+    # Darker shading on the right side of cranium (light from top-left)
+    for y in range(5, 17):
+        for x in range(15, 23):
+            px = img.getpixel((x, y))
+            if px == c("C4"):
+                dx = (x - cx) / rx
+                if dx > 0.45:
+                    put(img, x, y, c("C3"))
+                if dx > 0.75:
+                    put(img, x, y, c("C2"))
+
+    # Eye sockets: two dark rectangles
+    fill_rect(img, 9, 10, 12, 13, c("D0"))
+    fill_rect(img, 10, 11, 11, 12, c("D2"))
+    fill_rect(img, 17, 10, 20, 13, c("D0"))
+    fill_rect(img, 18, 11, 19, 12, c("D2"))
+
+    # Nasal triangle (inverted) below eyes
     put(img, 15, 14, c("D0"))
     fill_rect(img, 14, 15, 16, 15, c("D0"))
     fill_rect(img, 13, 16, 17, 16, c("D0"))
+    put(img, 15, 16, c("D2"))
 
-    # Highlight on top-left of cranium
-    put(img, 10, 6, c("N := ''")[:0] or c("C4"))  # no-op, placeholder
-    # Subtle shading: darker cream on right side
-    for y in range(6, 17):
-        for x in range(16, 22):
-            if img.getpixel((x, y)) == c("C4"):
-                if (x - cx) / rx > 0.4:
-                    put(img, x, y, c("C3"))
-    # Top highlight
-    hline(img, 13, 17, 5, c("N := ''")[:0] or (255, 255, 255, 0))  # noop
-    for x in range(12, 18):
-        if img.getpixel((x, 5)) != (0, 0, 0, 0):
-            put(img, x, 5, c("C4"))
-
-    # Jaw: lower narrower section y=19..23
-    jaw_top = 19
-    for y in range(jaw_top, 24):
-        narrow = (y - jaw_top)
-        left = 11 + narrow
-        right = 19 - narrow
-        if left > right:
-            break
+    # Jaw: narrower section y=19..22
+    jaw_rows = [
+        (19, 11, 19),
+        (20, 12, 18),
+        (21, 13, 17),
+        (22, 14, 16),
+    ]
+    for y, left, right in jaw_rows:
         fill_rect(img, left, y, right, y, c("C3"))
         put(img, left - 1, y, c("D0"))
         put(img, right + 1, y, c("D0"))
-    # Seal cranium-jaw gap
-    hline(img, 10, 20, 18, c("D0"))
+    # Close jaw bottom
+    hline(img, 14, 16, 23, c("D0"))
 
-    # Teeth: vertical marks on jaw row 20
-    for tx in (11, 13, 15, 17, 19):
-        put(img, tx, 20, c("D2"))
-        put(img, tx, 21, c("D2"))
+    # Teeth: vertical marks on jaw top
+    for tx in (12, 14, 16, 18):
+        put(img, tx, 19, c("D0"))
 
-    # Jaw bottom
-    hline(img, 12, 18, 23, c("D0"))
-
-    # Small crack detail on top of cranium (adds character)
+    # Small crack detail at top of cranium
     put(img, 14, 6, c("D2"))
     put(img, 14, 7, c("D2"))
     put(img, 15, 8, c("D2"))
