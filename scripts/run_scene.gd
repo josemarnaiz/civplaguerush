@@ -239,9 +239,12 @@ func _render_state() -> void:
 func _tween_stat_number(label: Label, target_value: int, max_value: int = -1) -> void:
 	if label == null:
 		return
-	var existing: Tween = label.get_meta("count_tw", null)
-	if existing is Tween and existing.is_valid():
-		existing.kill()
+	# Godot 4.6 logs an error from get_meta even when a default is provided and
+	# the meta is unset, so we gate on has_meta to keep _render_state quiet.
+	if label.has_meta("count_tw"):
+		var existing: Tween = label.get_meta("count_tw")
+		if existing is Tween and existing.is_valid():
+			existing.kill()
 	var current_text: String = label.text
 	var current_value: int = _parse_leading_int(current_text)
 	# Nothing to animate.
@@ -310,9 +313,10 @@ func _update_crisis_alarm(crisis: int) -> void:
 		stat_crisis_row.set_meta("alarm_tw", tw)
 	elif not should_alarm and _crisis_alarm_active:
 		_crisis_alarm_active = false
-		var existing: Tween = stat_crisis_row.get_meta("alarm_tw", null)
-		if existing is Tween and existing.is_valid():
-			existing.kill()
+		if stat_crisis_row.has_meta("alarm_tw"):
+			var existing: Tween = stat_crisis_row.get_meta("alarm_tw")
+			if existing is Tween and existing.is_valid():
+				existing.kill()
 		var cooldown := create_tween()
 		cooldown.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		cooldown.tween_property(stat_crisis_row, "modulate", Color(1, 1, 1, 1), 0.25)
@@ -598,9 +602,10 @@ func _wire_choice_hover(button: Button) -> void:
 func _hover_choice(button: Button, entering: bool) -> void:
 	if not is_instance_valid(button):
 		return
-	var kill: Tween = button.get_meta("hover_tw", null)
-	if kill is Tween and kill.is_valid():
-		kill.kill()
+	if button.has_meta("hover_tw"):
+		var kill: Tween = button.get_meta("hover_tw")
+		if kill is Tween and kill.is_valid():
+			kill.kill()
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
