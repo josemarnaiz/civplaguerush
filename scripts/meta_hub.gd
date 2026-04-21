@@ -3,6 +3,7 @@ extends Control
 const MetaProgressionClass = preload("res://scripts/systems/meta_progression.gd")
 const SessionBridgeClass = preload("res://scripts/systems/session_bridge.gd")
 const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd")
+const UserSettingsClass = preload("res://scripts/systems/user_settings.gd")
 
 @onready var summary_label: Label = $Margin/VBox/SummaryLabel
 @onready var credits_label: Label = $Margin/VBox/Header/CreditsBadge/CreditsLabel
@@ -17,10 +18,12 @@ const BADGE_LOCKED_PATH: String = "res://assets/art/icons/badge_locked.png"
 var meta_progression: MetaProgression
 var tech_data: Array = []
 var platform_profile: PlatformProfile
+var _locale: String = "en"
 
 
 func _ready() -> void:
 	platform_profile = PlatformProfileClass.new()
+	_locale = UserSettingsClass.get_locale()
 	tech_data = _load_json_array("res://data/techs.json")
 
 	meta_progression = MetaProgressionClass.new()
@@ -42,18 +45,21 @@ func _apply_platform_profile() -> void:
 
 func _render() -> void:
 	var run_result: Dictionary = SessionBridgeClass.load_run_result()
+	var es: bool = _locale == "es"
+	play_again_button.text = "Jugar otra vez" if es else "Play Again"
+	main_menu_button.text = "Menu principal" if es else "Main Menu"
 	if run_result.is_empty():
-		summary_label.text = "No recent run. Start a run to earn credits and unlock upgrades."
+		summary_label.text = "No hay partida reciente. Inicia una para ganar creditos y desbloquear mejoras." if es else "No recent run. Start a run to earn credits and unlock upgrades."
 	else:
 		var outcome: String = String(run_result.get("outcome", "timeout"))
 		var gained: int = int(run_result.get("credits_gained", 0))
 		var chapter_completed: bool = bool(run_result.get("chapter_goal_completed", false))
-		var chapter_line: String = "Chapter objective: not completed"
+		var chapter_line: String = "Objetivo de capitulo: no completado" if es else "Chapter objective: not completed"
 		if chapter_completed:
-			chapter_line = "Chapter objective: completed"
-		summary_label.text = "Last run outcome: %s\nCredits gained: %d\n%s" % [outcome, gained, chapter_line]
+			chapter_line = "Objetivo de capitulo: completado" if es else "Chapter objective: completed"
+		summary_label.text = ("Resultado de la ultima partida: %s\nCreditos ganados: %d\n%s" if es else "Last run outcome: %s\nCredits gained: %d\n%s") % [outcome, gained, chapter_line]
 
-	credits_label.text = "Permanent credits: %d" % meta_progression.credits
+	credits_label.text = ("Creditos permanentes: %d" if es else "Permanent credits: %d") % meta_progression.credits
 
 	for child in techs_container.get_children():
 		child.queue_free()
@@ -113,7 +119,7 @@ func _render() -> void:
 		row.add_child(cost_label)
 
 		var button := Button.new()
-		button.text = "UNLOCKED" if is_unlocked else "Unlock"
+		button.text = ("DESBLOQUEADO" if es else "UNLOCKED") if is_unlocked else ("Desbloquear" if es else "Unlock")
 		button.disabled = is_unlocked
 		button.custom_minimum_size = Vector2(120, 40)
 		if not is_unlocked:

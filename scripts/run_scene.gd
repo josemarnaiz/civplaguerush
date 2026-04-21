@@ -7,6 +7,7 @@ const CampaignManagerClass = preload("res://scripts/systems/campaign_manager.gd"
 const MetricsTrackerClass = preload("res://scripts/systems/metrics_tracker.gd")
 const SessionBridgeClass = preload("res://scripts/systems/session_bridge.gd")
 const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd")
+const UserSettingsClass = preload("res://scripts/systems/user_settings.gd")
 const LOSS_ALERT_VOLUME_DB: float = -9.0
 
 @onready var turn_label: Label = $Margin/VBox/Header/TurnLabel
@@ -91,17 +92,19 @@ var _controlled_regions_prev: Dictionary = {}
 var _loss_audio_player: AudioStreamPlayer = null
 var _loss_audio_stream: AudioStreamGenerator = null
 var _event_icon_cache: Dictionary = {}
+var _choice_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _locale: String = "en"
 
 
 func _ready() -> void:
 	back_button.pressed.connect(_on_back_pressed)
 	platform_profile = PlatformProfileClass.new()
+	_locale = UserSettingsClass.get_locale()
 	_apply_platform_profile()
 
 	config = _load_json_dict("res://data/run_config.json")
 	events_data = _load_json_array("res://data/events.json")
 	tech_data = _load_json_array("res://data/techs.json")
-	chapter_data = _load_json_dict("res://data/campaign_ch1.json")
 	region_defs = _load_json_dict("res://data/regions.json")
 
 	world_simulation = WorldSimulationClass.new()
@@ -111,19 +114,22 @@ func _ready() -> void:
 	metrics_tracker = MetricsTrackerClass.new()
 
 	meta_progression.initialize(tech_data)
+	chapter_data = _select_active_chapter(meta_progression.chapter_status)
 	campaign_manager.initialize(chapter_data)
-	event_director.initialize(events_data)
+	campaign_manager.set_locale(_locale)
+	event_director.initialize(events_data, _locale)
 	world_simulation.initialize(config, meta_progression.get_run_modifiers(), region_defs)
 	metrics_tracker.start_run()
 	_setup_loss_audio()
 	_control_snapshot_sync()
+	_choice_rng.randomize()
 
 	if region_map.has_method("build_from_snapshot"):
 		region_map.build_from_snapshot(world_simulation.regions_snapshot())
 	if region_map.has_signal("region_clicked") and not region_map.region_clicked.is_connected(_on_region_clicked):
 		region_map.region_clicked.connect(_on_region_clicked)
 
-	chapter_label.text = campaign_manager.chapter_title()
+	chapter_label.text = _chapter_text(chapter_data, "title")
 	_start_turn()
 
 
@@ -205,7 +211,7 @@ func _show_turn_ribbon() -> void:
 
 
 func _render_state() -> void:
-	turn_label.text = "Turn %d / %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
+	turn_label.text = ("Turno %d / %d" if _locale == "es" else "Turn %d / %d") % [world_simulation.turn_index + 1, world_simulation.turns_total]
 	var s: Dictionary = world_simulation.world_state
 	var target: int = int(config.get("win_conditions", {}).get(
 		"target_control_regions", WorldSimulationClass.DEFAULT_TARGET_CONTROL_REGIONS))
@@ -229,7 +235,7 @@ func _render_state() -> void:
 	# any lingering alarm tween decay back to 1.0.
 	_update_crisis_alarm(crisis)
 
-	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
+	progress_label.text = ("Decision %d / %d en este turno" if _locale == "es" else "Decision %d / %d this turn") % [current_event_index + 1, max(1, decisions_this_turn)]
 	_refresh_region_map()
 
 
@@ -516,15 +522,19 @@ func _on_choice_selected(choice: Dictionary) -> void:
 	# and surface floating +/- numbers over the corresponding HUD stat.
 	var pre_state: Dictionary = world_simulation.world_state.duplicate(true)
 
-	var global_effects: Dictionary = choice.get("effects", {})
+	var target_region: Dictionary = {}
+	if target_id != "":
+		target_region = world_simulation.region_grid.get_region(target_id)
+
+	var global_effects: Dictionary = _roll_effects(choice.get("effects", {}), {})
 	if not global_effects.is_empty():
 		world_simulation.apply_effects(global_effects)
 
-	var regional_effects: Dictionary = choice.get("effects_regional", {})
+	var regional_effects: Dictionary = _roll_effects(choice.get("effects_regional", {}), target_region)
 	if not regional_effects.is_empty() and target_id != "":
 		world_simulation.apply_effects_regional(target_id, regional_effects)
 
-	var adjacent_effects: Dictionary = choice.get("effects_adjacent", {})
+	var adjacent_effects: Dictionary = _roll_effects(choice.get("effects_adjacent", {}), target_region)
 	if not adjacent_effects.is_empty() and target_id != "":
 		world_simulation.apply_effects_adjacent(target_id, adjacent_effects)
 
@@ -900,6 +910,104 @@ func _safe_load_texture(path: String) -> Texture2D:
 	var tex: Texture2D = res as Texture2D
 	_event_icon_cache[path] = tex
 	return tex
+
+
+func _select_active_chapter(status: Dictionary) -> Dictionary:
+	var chapter_paths: Array[String] = [
+		"res://data/campaign_ch1.json",
+		"res://data/campaign_ch2.json",
+		"res://data/campaign_ch3.json"
+	]
+	var first_available: Dictionary = {}
+	for p in chapter_paths:
+		var data: Dictionary = _load_json_dict(p)
+		if data.is_empty():
+			continue
+		if first_available.is_empty():
+			first_available = data
+		var cid: String = String(data.get("chapter_id", ""))
+		if cid == "" or String(status.get(cid, "")) != "completed":
+			return data
+	return first_available
+
+
+func _chapter_text(chapter: Dictionary, key: String) -> String:
+	if _locale == "es":
+		var es_key: String = "%s_es" % key
+		if chapter.has(es_key):
+			return String(chapter.get(es_key, ""))
+	return String(chapter.get(key, ""))
+
+
+func _roll_effects(base_effects: Dictionary, region: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key in base_effects.keys():
+		var stat: String = String(key)
+		var base: int = int(base_effects[key])
+		if base == 0:
+			continue
+		var final_delta: int = _roll_delta(base, stat, region)
+		if final_delta != 0:
+			out[stat] = final_delta
+	return out
+
+
+func _roll_delta(base: int, stat: String, region: Dictionary) -> int:
+	var abs_base: int = absi(base)
+	# Base variance: small effects wobble by +/-1, larger effects by roughly 30%.
+	# This keeps outcomes legible while breaking deterministic "same click, same
+	# exact number" repetition across runs.
+	var variance: int = 1 if abs_base <= 3 else maxi(1, int(round(float(abs_base) * 0.30)))
+	var rolled: int = base + _choice_rng.randi_range(-variance, variance)
+
+	if region.is_empty():
+		# Global choices still carry slight pressure-based dynamics.
+		if stat == "crisis":
+			var w_crisis: int = int(world_simulation.world_state.get("crisis", 0))
+			if w_crisis >= 60:
+				rolled = int(round(float(rolled) * 1.10))
+		elif stat == "resources":
+			var w_res: int = int(world_simulation.world_state.get("resources", 0))
+			if rolled < 0 and w_res <= 25:
+				rolled = int(round(float(rolled) * 1.12))
+		return rolled
+
+	var infection: int = int(region.get("infection", 0))
+	var influence: int = int(region.get("influence", 0))
+	var stability: int = int(region.get("stability", 0))
+	var multiplier: float = 1.0
+
+	match stat:
+		"infection":
+			# Hotspots react harder both to cures and to outbreaks.
+			if infection >= 60:
+				multiplier = 1.20
+			elif infection <= 15:
+				multiplier = 0.90
+		"influence":
+			# Influence gains are easier in weakly-held regions, harder in entrenched ones.
+			if rolled > 0 and influence < 30:
+				multiplier = 1.25
+			elif rolled > 0 and influence >= 70:
+				multiplier = 0.82
+			elif rolled < 0 and influence >= 70:
+				multiplier = 1.15
+		"stability":
+			if rolled > 0 and stability < 35:
+				multiplier = 1.20
+			elif rolled < 0 and stability < 35:
+				multiplier = 1.15
+		_:
+			multiplier = 1.0
+
+	var modded: int = int(round(float(rolled) * multiplier))
+	# Rare swing so identical decisions don't feel scripted.
+	if abs_base >= 4 and _choice_rng.randf() < 0.10:
+		var swing: int = _choice_rng.randi_range(1, 2)
+		modded += swing if modded > 0 else -swing
+	if modded == 0:
+		modded = 1 if rolled > 0 else -1
+	return modded
 
 
 func _load_json_dict(path: String) -> Dictionary:

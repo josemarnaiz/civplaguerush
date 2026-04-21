@@ -1,0 +1,16 @@
+{
+  "chapter_id": "chapter_03_last_containment",
+  "title": "Chapter 3: Last Containment",
+  "title_es": "Capitulo 3: Ultima Contencion",
+  "intro": "Final campaign phase. Every decision echoes across neighboring territories; tactical wins are no longer enough without disciplined crisis control.",
+  "intro_es": "Fase final de campana. Cada decision resuena en territorios vecinos; las victorias tacticas ya no bastan sin un control estricto de la crisis.",
+  "primary_goal": "Finish a run with at least 7 controlled regions and crisis at 50 or lower.",
+  "primary_goal_es": "Termina una partida con al menos 7 regiones controladas y crisis de 50 o menos.",
+  "requirements": {
+    "min_control_regions": 7,
+    "max_crisis": 50,
+    "min_stability": 30,
+    "min_influence": 40
+  },
+  "epilogue": "The chapter closes with a fragile order: your map is unified, but not healed."
+}

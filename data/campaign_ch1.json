@@ -1,8 +1,11 @@
 {
   "chapter_id": "chapter_01_echoes_of_ash",
   "title": "Chapter 1: Echoes of Ash",
+  "title_es": "Capitulo 1: Ecos de Ceniza",
   "intro": "After the Great Outbreak, your coalition rises from the shattered cities. Every region you stabilize feeds your influence, but every harsh decision spreads fear.",
+  "intro_es": "Tras el Gran Brote, tu coalicion se alza entre ciudades rotas. Cada region estabilizada aumenta tu influencia, pero cada decision dura extiende el miedo.",
   "primary_goal": "Finish one run with at least 6 controlled regions and under 70 crisis.",
+  "primary_goal_es": "Termina una partida con al menos 6 regiones controladas y crisis por debajo de 70.",
   "unlock_on_complete": "unlock_event_tier_2",
   "milestones": [
     {

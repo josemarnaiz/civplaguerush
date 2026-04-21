@@ -1,0 +1,15 @@
+{
+  "chapter_id": "chapter_02_ember_frontiers",
+  "title": "Chapter 2: Ember Frontiers",
+  "title_es": "Capitulo 2: Fronteras de Brasa",
+  "intro": "The coalition expands into fractured borderlands. Victories now depend on containing infection while consolidating influence in volatile regions.",
+  "intro_es": "La coalicion se expande por fronteras fracturadas. Las victorias ahora dependen de contener la infeccion mientras consolidas influencia en regiones inestables.",
+  "primary_goal": "Finish a run with at least 7 controlled regions and crisis at 55 or lower.",
+  "primary_goal_es": "Termina una partida con al menos 7 regiones controladas y crisis de 55 o menos.",
+  "requirements": {
+    "min_control_regions": 7,
+    "max_crisis": 55,
+    "min_stability": 20
+  },
+  "epilogue": "You hold the frontiers, but the rival doctrine starts weaponizing migration routes."
+}
