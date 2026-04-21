@@ -62,18 +62,18 @@ texture_filter = 1
 [node name="Title" type="Label" parent="Card/Margin/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 48
-text = "VICTORY"
+text = "--"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="Card/Margin/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
-text = "The coalition holds."
+text = ""
 horizontal_alignment = 1
 autowrap_mode = 2
 
 [node name="Hint" type="Label" parent="Card/Margin/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "Continue →"
+text = ""
 horizontal_alignment = 1

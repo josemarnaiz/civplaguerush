@@ -206,42 +206,74 @@ Antes de dar un asset por "done":
 
 ## 7. Mapamundi continental (`scripts/ui/region_map.gd`)
 
-El mapa se ha reescrito para leerse como un mapamundi tipo Risk/Imperialism,
-no como un enjambre de blobs aislados.
+El mapa se repintó de cero para leerse como un **mapamundi pintado tipo
+Tierra Media**: una única masa continental irregular con cordilleras nevadas,
+ríos, archipiélago costero y viñeta de pergamino, no el grid 4×3 original.
 
 ### 7.1 Topología
-Tres bandas latitudinales con seas entre ellas. Las 12 regiones se distribuyen
-siguiendo el `CONTINENT_LAYOUT`:
+Una sola masa continental + un archipiélago offshore (r10) al suroeste.
+Las 12 regiones son celdas de un **Voronoi** sobre 11 seeds pintados a mano
+(la duodécima es el archipiélago) dentro de un outline continental también
+cincelado a mano. Claves en constantes al principio del script:
 
-```
-Row 0 (Norte):       [r01, r02, r03, r04]  -> un solo continente Eurasia-like
-Row 1 (Ecuador):     [r05, r06] | [r07, r08]  -> dos continentes con golfo atlántico
-Row 2 (Sur):         [r09] | [r10] | [r11, r12]  -> isla, archipiélago, continente
-```
+- `CONTINENT_OUTLINE`: 32 anchor points en sentido horario que definen la
+  silueta. En runtime se suaviza con Catmull-Rom y se ondula con tres
+  sinusoidales superpuestas (7/17/33 ciclos) a lo largo de la normal
+  tangente → 144 samples de costa pintada.
+- `REGION_SEEDS`: un `Vector2` por región en coords 0..1. Se eligieron a ojo
+  respetando los biomas (tundra al norte, volcán al SE, arcology al centro-
+  sur, costa al oeste, etc.) y dejando hueco para el archipiélago.
+- `OFFSHORE_IDS`: ids que **no** participan en el Voronoi y se construyen
+  aparte como islas (`_build_offshore_archipelago`).
 
-- Las regiones de un mismo grupo **comparten costa interior**: el polígono de
-  `r02` empieza exactamente donde acaba el de `r01`, sin hueco oceánico.
-- Los bordes internos (p.ej. r01|r02) se dibujan como **línea dorada
-  punteada** (`INTERNAL_BORDER`, O3 alpha 0.70), para que se lean como
-  frontera política y no como costa.
-- Los bordes exteriores de cada continente se dibujan como polyline oscura
-  gruesa (`COAST_COLOR` 1.6 px) con halo cream (`COAST_GLOW` 3.2 px) debajo,
-  imitando pintura a mano sobre pergamino.
+### 7.2 Carving Voronoi
+Para cada seed en tierra se lanzan `VORONOI_RAYS=80` rayos desde el centro.
+La distancia de cada rayo es el mínimo de:
+1. **Bisector** contra todas las demás seeds: si `denom = (q-p)·dir > 0`,
+   `t = 0.5·|q-p|² / denom`. Clipea el rayo al hiperplano de Voronoi.
+2. **Outline**: primer cruce del rayo con la costa (rejilla lineal contra
+   los 144 segmentos usando `Geometry2D.segment_intersects_segment`).
+3. Un pequeño **inset** (0.0025) para que polígonos adyacentes no se pisen.
 
-### 7.2 Geometría de costa
-Para cada continente se muestrean 12 puntos por columna a lo largo del top y
-bottom. La ordenada aplica tres sinusoidales superpuestas:
-- **Continental** (0.75 ciclos por grupo, amp 0.018-0.055): curvatura grande.
-- **Media** (2.0-2.2 ciclos, amp 0.014): bahías y cabos.
-- **Fina** (4.1-4.7 ciclos, amp 0.006): detalle costero.
+El radio final se multiplica por un factor de ondulación con tres frecuencias
+(3/7/13 ciclos angulares, fase por-región derivada del hash del id) → los
+bordes internos no son segmentos rectos sino curvas pintadas.
 
-Además se aplica un **eje continental** (sin amp 0.010-0.040, phase por-continente)
-que desplaza **TODO** el continente arriba/abajo a lo largo de su largo → el
-resultado es un continente que serpentea, no una barra horizontal.
+Los bordes políticos dorados (`_continent_internal_borders`) se calculan
+caminando la **bisectriz** entre cada par de regiones adyacentes hasta que
+se cruza otro Voronoi o la costa (`_bisector_walk_limit`). Eso garantiza que
+el borde dorado siempre esté dentro del tejido continental.
 
-Los extremos se tapera (smoothstep 12%) para que las costas norte/sur se unan
-limpiamente con las costas laterales (oeste/este) que se generan como curvas
-verticales con indentación SIDE_COAST_INDENT = 0.014.
+### 7.3 Cordilleras y ríos pintados
+- `MOUNTAIN_RANGES`: 4 cordilleras authoradas (spine norte, Misty central,
+  Ash oriental, cresta Harad al sur). Cada una es un polyline que se samplea
+  cada ~11 px en píxeles reales; en cada punto se dibuja un pico con 3 tonos
+  (cuerpo cálido, sombra derecha, cap de nieve cream) + outline oscuro.
+  La altura/anchura de cada pico varía con un hash posicional.
+- `MAIN_RIVER` + `TRIBUTARY`: dos polylines Catmull-Rom smoothed + sine
+  wobble perpendicular. Render en dos pases (halo claro más grueso + core
+  slate). El río principal añade un pequeño **delta circular** en la salida
+  al mar. Se dibujan **bajo** las cordilleras para que las crestas parezcan
+  cortar el cauce, como en los mapas de Tolkien.
+
+### 7.4 Adornos por bioma (`_draw_biome_ornaments`)
+Cada región salpica micro-iconos dentro de su polígono (rechazo-muestreo
+semilla por id, excluyendo el centroide donde van el biome-icon y el label):
+- **veil / jungle**: pinos con wedge claro + tronco (más densos en jungle).
+- **drylands**: curvas de duna (polylines sinusoidales en O2).
+- **ruins**: columnas rotas (3 rectángulos apilados con grietas laterales).
+- **volcano**: brasas con halo naranja que pulsa con `_time` (2.3 Hz).
+- **tundra**: estrellas de hielo (cruz + diagonales cream).
+
+### 7.5 Costa, viñeta y legibilidad
+- Costa exterior: doble trazo (glow cream 3.2 px + dark 1.6 px).
+- Shelf halo (`_draw_shelf_halos`): expand 1.2% → plataforma continental.
+- **Label backplate**: cada etiqueta (nombre + INF/PLG) va sobre un
+  `draw_rect` translúcido `Color(D0, 0.55)` para leer encima de montañas,
+  bosques y ríos sin sacrificar legibilidad.
+- **Viñeta de pergamino** (`_draw_parchment_vignette`): 4 triángulos
+  gradiente D0 alpha 0.55 → 0 en las 4 esquinas, para que el mapa se lea
+  como plato cartográfico y no como rectángulo.
 
 ### 7.3 Océano animado (5 pases `_draw`)
 1. `_draw_ocean_gradient` — bandas horizontales D1→D0 arriba y cálida abajo.
@@ -272,8 +304,11 @@ misma doble-costa (halo + dark) y shadow offset que los continentes.
 - **Flash de pérdida de control** (existente): anillo R4 que fade over 1.2s.
 
 ### 7.6 Layout final
-- `Vector2(0, 190)` altura mínima del RegionMap en RunScene (ajustada para
-  que cabecera + HUD + evento con consejero + footer fit en 720p sin overflow).
+- `Vector2(0, 260)` altura mínima del `RegionMap` en `RunScene.tscn`. El
+  bump desde 190 → 260 es necesario para que el continente Voronoi tenga
+  un ratio ~3.8:1 (1000×260 cuando el HUD ocupa ancho completo), no un
+  trozo aplastado tipo stripe. Header + StatePanel + EventPanel + Actions
+  siguen cabiendo en 720p sin scroll.
 
 ---
 
@@ -404,7 +439,7 @@ respiren pero no compitan con el logo central.
 prevalezca. Las techs se renderizan ahora como tarjetas horizontales con
 cuatro zonas:
 
-1. **Badge** (`*` verde si desbloqueada, `$` oro si asequible, `-` malva si no).
+1. **Badge** — icono 20×20 en placa circular (ver 9.7).
 2. **Info** — nombre a 18 pt + descripción autowrap a 13 pt modulate 0.82.
 3. **Pill de coste** — "NN cr" en O3/D3 según affordability.
 4. **Botón** — "UNLOCKED" (disabled) o "Unlock" (activo sólo si hay créditos).
@@ -427,3 +462,117 @@ strands rojos curvos que emanan del centroide. Características:
 Se dibuja como Pass 2d (después de coastlines y rings, antes de iconos de
 bioma y labels) para que los strands atraviesen el borde de la región pero
 queden bajo el texto y los biome icons.
+
+### 9.7 Tech badges 20×20 (`tools/art_gen/gen_tech_badges.py`)
+Sustituyen los placeholders `* / $ / -` por tres emblemas sobre placa
+circular plum con ring dorado tarnished. Cada badge comunica un estado sin
+necesidad de leer el coste:
+
+| Slug | Emblema | Estado |
+|------|--------|--------|
+| `badge_unlocked` | Estrella de cinco puntas O5 con corazón O4 | Tech ya adquirida — trofeo |
+| `badge_affordable` | Stack de tres monedas O2→O4 con chip R3 | Tienes créditos suficientes |
+| `badge_locked` | Eslabón de cadena B2/B3 partido + polvo C1 | Fuera de alcance / bloqueada |
+
+En `meta_hub.gd` el badge es un `TextureRect` 32×32 con
+`texture_filter = NEAREST`, así la escala preserva el pixel clean. El
+`stretch_mode = KEEP_ASPECT_CENTERED` permite que si algún día reescalamos
+la fila a 40 px, el badge no deforme.
+
+### 9.8 Title pulse del MainMenu (`main_menu.gd::_process`)
+El `TitleRow/Title` TextureRect respira con un sine de 1.4 rad/s:
+
+- **Escala** `1.0 ± 1.2%` (imperceptible hasta que los ojos se aclimatan).
+- **Modulate** tinte cálido variable sobre canales G/B, simulando el
+  resplandor O2 → O4 de una brasa asentándose. Nunca satura de color.
+- Pivot center recalculado en `resized` signal para que el pulse no empuje
+  el logo del eje cuando el layout responde a tamaños distintos.
+
+Combinado con el mural `menu_backdrop`, el resultado es que incluso en
+idle la pantalla inicial se siente como un fresco vivo donde la luz oscila
+lentamente sobre el Canciller.
+
+### 9.9 Region-pick mode (selector de región activo)
+Durante `player_chooses`, la UI tenía un problema de lectura: los botones
+quedaban deshabilitados (gris) y el único pista era un `>` al final de la
+descripción (ver QA BUG-005). La nueva capa añade tres señales
+redundantes para que el jugador no dude:
+
+1. **Hint banner** en gold O4 al principio del `Choices` VBox
+   (`[!] Pick a region on the map.`) con outline D0 4 px, breath loop 0.72
+   ↔ 1.0 a ~0.8 Hz, fade-in 0.28 s cubic-out.
+2. **Ring pulsante** en las regiones elegibles: `RING_SELECTABLE` ahora
+   modula alfa entre 0.65 y 1.0 y grosor 2.6 → 3.8 con sine `4.2 rad/s`,
+   destacando sobre el ruido del mapa sin sobre-animar el resto.
+3. Los botones deshabilitados permanecen visibles debajo, mostrando las
+   opciones sintácticamente pero claramente secundarias.
+
+El banner vive el ciclo de vida del pick: se añade en
+`_begin_region_pick_mode`, se libera automáticamente por el `queue_free`
+de children en el próximo `_render_current_event`, y el tween de breath se
+almacena como meta por si hubiera que cortarlo antes.
+
+### 9.10 Etiquetas del mapa + legenda (`I:V:` → `INF/PLG`)
+Las etiquetas de región usaban `I:NN V:NN` — ambiguas (QA BUG-008). El
+nuevo formato es `INF NN . PLG NN` en dos mitades pintadas con color:
+
+- **INF** en cream TOOLTIP_TEXT (influencia política del jugador).
+- Separador `" . "` en alpha 0.45 para crear ritmo sin ruido.
+- **PLG** en R4 rose-red, bumpeado a R4+0.07 luminosidad cuando la región
+  ≥ 50% de plaga (refuerzo visual con los tendrils de 9.6).
+
+En la esquina inferior izquierda del mapa vive una mini-legenda de 10 pt:
+`INF influence · PLG plague` (siglas en su color real, glosas en alpha
+0.55) para que la primera vez que se vea la UI, el significado quede claro
+sin necesidad de hover.
+
+El tooltip se alineó al nuevo vocabulario (`Plague` en vez de
+`Infection`) para que la palabra que ve el jugador al hoverar coincida
+con la abreviatura que lee en el label.
+
+### 9.11 HUD stat count-up (`_tween_stat_number`)
+Antes las stats del HUD saltaban instantáneamente (`47 → 52`). Ahora cada
+cambio tweenea el valor numérico durante 0.35 s (cubic-out, 0.18 s si el
+delta es <3) usando `tween_method` sobre un int redondeado, de modo que
+el jugador *ve* el contador subir/bajar y no solo ve un valor diferente:
+
+- El helper parsea el leading int del texto actual (`"45"`, `"-3"`,
+  `"3 / 7"`) para saber desde dónde empezar, y acepta un `max_value`
+  opcional para stats compuestas como `control 2 / 7`.
+- Cada label guarda su tween activo en `meta("count_tw")` para que un
+  nuevo render interrumpa el anterior sin superponer animaciones.
+- El stat floater (9.1) sigue siendo el feedback "grueso" por decisión; el
+  count-up es la continuidad "fina" del HUD. Juntos crean la sensación de
+  un tablero que responde, no un text-box que se reescribe.
+
+### 9.12 Crisis alarm sobre la fila de Crisis (`_update_crisis_alarm`)
+Cuando `crisis ≥ 50` (el umbral de derrota por defecto del juego), la
+fila entera del HUD "Crisis" empieza a respirar entre modulate
+`(1.0, 1.0, 1.0)` y `(1.15, 0.80, 0.80)` a ~0.9 Hz:
+
+- **Rising edge** (cruza 50 subiendo) → arranca un loop sine 0.55 s in/out
+  que tinta la fila hacia rojo cálido sin perder el pixel-art.
+- **Falling edge** (cae bajo 50) → se mata el loop y una cooldown tween
+  lleva modulate a blanco en 0.25 s (no desaparece de golpe).
+- El flag `_crisis_alarm_active` evita reiniciar el tween cada frame y
+  `meta("alarm_tw")` asegura que `kill()` corta el loop al bajar.
+
+Es compatible con `_tween_stat_number` (9.11) porque uno modifica `text`
+y el otro `modulate` de padre: no pelean por la misma propiedad.
+
+### 9.13 Turn ribbon (`_show_turn_ribbon`)
+Al comenzar cada turno (excepto el primero, que se abre con la transición
+MainMenu → RunScene), una banderola dorada O4 se desliza desde el borde
+izquierdo de la pantalla, queda centrada 1.05 s con el texto
+`TURN  N  /  M` en 28 pt, y sale por el borde derecho en 0.35 s más.
+
+- El contenedor es un `PanelContainer` con `StyleBoxFlat` D0 α=0.92 y
+  borde superior/inferior O4 2 px — cero color fuera de paleta.
+- Padding 48 px horizontal, 10 px vertical → la banda se siente
+  cinematográfica sin cubrir la mitad del HUD.
+- El label usa outline D0 6 px para que el texto no desaparezca sobre el
+  arte del mapa o el `menu_backdrop` si el ribbon se solapa.
+- Se instancia bajo el mismo `CanvasLayer` (`layer=50`) que los stat
+  floaters (9.1), así nunca compite con overlays inferiores.
+- La tween es secuencial: entrada → hold → salida → `queue_free`, así que
+  nunca quedan ribbons huérfanos aunque el jugador spamée turnos.

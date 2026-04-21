@@ -366,6 +366,14 @@ func _cmd_click(params: Dictionary) -> void:
 	var y: float = float(params.get("y", 0))
 	var button: int = int(params.get("button", MOUSE_BUTTON_LEFT))
 
+	# Hard-guard against MOUSE_BUTTON_NONE (0). Godot's internal
+	# mouse_button_to_mask(button) floods the error log with
+	# "Condition \"button == MouseButton::NONE\" is true" whenever we inject an
+	# event with button_index == 0 (see BUG-010). Upstream callers that forget
+	# to pass `button` now get a safe LEFT-click instead of log spam.
+	if button <= MOUSE_BUTTON_NONE:
+		button = MOUSE_BUTTON_LEFT
+
 	var pos: Vector2 = Vector2(x, y)
 
 	# Mouse button press
@@ -1329,6 +1337,10 @@ func _cmd_mouse_drag(params: Dictionary) -> void:
 	var to_x: float = float(params.get("to_x", 0))
 	var to_y: float = float(params.get("to_y", 0))
 	var button: int = int(params.get("button", MOUSE_BUTTON_LEFT))
+	# See BUG-010: guard against MOUSE_BUTTON_NONE so drag events don't spam
+	# the engine error log with "button == MouseButton::NONE".
+	if button <= MOUSE_BUTTON_NONE:
+		button = MOUSE_BUTTON_LEFT
 	var steps: int = int(params.get("steps", 10))
 	if steps < 1:
 		steps = 1
@@ -2534,22 +2546,22 @@ func _cmd_ui_theme(params: Dictionary) -> void:
 
 	# Color overrides
 	var colors: Dictionary = overrides.get("colors", {})
-	for name in colors:
-		var c: Dictionary = colors[name]
-		ctrl.add_theme_color_override(name, Color(float(c.get("r", 0)), float(c.get("g", 0)), float(c.get("b", 0)), float(c.get("a", 1))))
-		applied.append("color:" + name)
+	for override_name in colors:
+		var c: Dictionary = colors[override_name]
+		ctrl.add_theme_color_override(override_name, Color(float(c.get("r", 0)), float(c.get("g", 0)), float(c.get("b", 0)), float(c.get("a", 1))))
+		applied.append("color:" + String(override_name))
 
 	# Constant overrides
 	var constants: Dictionary = overrides.get("constants", {})
-	for name in constants:
-		ctrl.add_theme_constant_override(name, int(constants[name]))
-		applied.append("constant:" + name)
+	for override_name in constants:
+		ctrl.add_theme_constant_override(override_name, int(constants[override_name]))
+		applied.append("constant:" + String(override_name))
 
 	# Font size overrides
 	var font_sizes: Dictionary = overrides.get("font_sizes", {})
-	for name in font_sizes:
-		ctrl.add_theme_font_size_override(name, int(font_sizes[name]))
-		applied.append("font_size:" + name)
+	for override_name in font_sizes:
+		ctrl.add_theme_font_size_override(override_name, int(font_sizes[override_name]))
+		applied.append("font_size:" + String(override_name))
 
 	_send_response({"success": true, "node_path": node_path, "applied": applied})
 
@@ -2890,7 +2902,7 @@ func _cmd_input_state(params: Dictionary) -> void:
 				"hidden": mode_val = Input.MOUSE_MODE_HIDDEN
 				"captured": mode_val = Input.MOUSE_MODE_CAPTURED
 				"confined": mode_val = Input.MOUSE_MODE_CONFINED
-			Input.mouse_mode = mode_val
+			Input.mouse_mode = mode_val as Input.MouseMode
 			_send_response({"success": true, "action": "set_mouse_mode", "mode": mode_str})
 		_:
 			_send_response({"error": "Unknown input_state action: %s" % action})
@@ -3047,7 +3059,7 @@ func _cmd_process_mode(params: Dictionary) -> void:
 		"when_paused": mode_val = Node.PROCESS_MODE_WHEN_PAUSED
 		"always": mode_val = Node.PROCESS_MODE_ALWAYS
 		"disabled": mode_val = Node.PROCESS_MODE_DISABLED
-	node.process_mode = mode_val
+	node.process_mode = mode_val as Node.ProcessMode
 	_send_response({"success": true, "node_path": node_path, "mode": mode_str})
 
 

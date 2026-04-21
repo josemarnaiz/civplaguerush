@@ -19,6 +19,7 @@ import gen_ornaments
 import gen_advisors
 import gen_menu_backdrop
 import gen_choice_chips
+import gen_tech_badges
 import gen_preview
 
 
@@ -50,6 +51,8 @@ def main() -> None:
     gen_menu_backdrop.generate()
     print("== choice chips ==")
     gen_choice_chips.generate()
+    print("== tech badges ==")
+    gen_tech_badges.generate()
     print("== preview ==")
     gen_preview.build_preview()
     print("\nAll art regenerated.")

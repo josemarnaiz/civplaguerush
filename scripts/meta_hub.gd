@@ -10,6 +10,10 @@ const PlatformProfileClass = preload("res://scripts/systems/platform_profile.gd"
 @onready var play_again_button: Button = $Margin/VBox/Actions/PlayAgainButton
 @onready var main_menu_button: Button = $Margin/VBox/Actions/MainMenuButton
 
+const BADGE_UNLOCKED_PATH: String = "res://assets/art/icons/badge_unlocked.png"
+const BADGE_AFFORDABLE_PATH: String = "res://assets/art/icons/badge_affordable.png"
+const BADGE_LOCKED_PATH: String = "res://assets/art/icons/badge_locked.png"
+
 var meta_progression: MetaProgression
 var tech_data: Array = []
 var platform_profile: PlatformProfile
@@ -70,15 +74,15 @@ func _render() -> void:
 		row.add_theme_constant_override("separation", 14)
 		card.add_child(row)
 
-		var badge := Label.new()
-		badge.custom_minimum_size = Vector2(28, 0)
-		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		badge.text = "*" if is_unlocked else ("$" if affordable else "-")
-		var badge_color: Color = Color(0.659, 0.737, 0.349, 1.0) if is_unlocked else (
-			Color(0.910, 0.753, 0.408, 1.0) if affordable else Color(0.415, 0.313, 0.345, 1.0))
-		badge.add_theme_color_override("font_color", badge_color)
-		badge.add_theme_font_size_override("font_size", 26)
+		var badge := TextureRect.new()
+		badge.custom_minimum_size = Vector2(32, 32)
+		badge.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		badge.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var badge_path: String = BADGE_UNLOCKED_PATH if is_unlocked else (
+			BADGE_AFFORDABLE_PATH if affordable else BADGE_LOCKED_PATH)
+		if ResourceLoader.exists(badge_path):
+			badge.texture = load(badge_path)
 		row.add_child(badge)
 
 		var info := VBoxContainer.new()

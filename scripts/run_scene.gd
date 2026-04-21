@@ -16,6 +16,7 @@ const LOSS_ALERT_VOLUME_DB: float = -9.0
 @onready var stat_influence: Label = $Margin/VBox/StatePanel/StatsBox/Influence/Value
 @onready var stat_resources: Label = $Margin/VBox/StatePanel/StatsBox/Resources/Value
 @onready var stat_crisis: Label = $Margin/VBox/StatePanel/StatsBox/Crisis/Value
+@onready var stat_crisis_row: HBoxContainer = $Margin/VBox/StatePanel/StatsBox/Crisis
 @onready var stat_control: Label = $Margin/VBox/StatePanel/StatsBox/Control/Value
 @onready var event_panel: PanelContainer = $Margin/VBox/EventPanel
 @onready var event_row: HBoxContainer = $Margin/VBox/EventPanel/EventRow
@@ -141,18 +142,79 @@ func _start_turn() -> void:
 
 	_render_state()
 	_render_current_event()
+	# Show the turn ribbon after the state is rendered so the new turn number
+	# is already on the HUD when the ribbon reads it. Skip on the very first
+	# render (turn 0) because the player just clicked Start Run.
+	if world_simulation.turn_index > 0:
+		_show_turn_ribbon()
+
+
+# Slides a gold ribbon across the top of the screen that reads "Turn N / M",
+# fading out after a beat. Purely decorative — does not block input.
+func _show_turn_ribbon() -> void:
+	var layer: CanvasLayer = _floater_layer
+	if layer == null:
+		layer = CanvasLayer.new()
+		layer.layer = 50
+		add_child(layer)
+		_floater_layer = layer
+
+	var ribbon := PanelContainer.new()
+	ribbon.name = "TurnRibbon"
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.059, 0.039, 0.055, 0.92)
+	bg.border_color = Color(0.910, 0.753, 0.407, 1.0)  # O4 gold
+	bg.set_border_width_all(0)
+	bg.border_width_top = 2
+	bg.border_width_bottom = 2
+	bg.content_margin_left = 48
+	bg.content_margin_right = 48
+	bg.content_margin_top = 10
+	bg.content_margin_bottom = 10
+	ribbon.add_theme_stylebox_override("panel", bg)
+
+	var lbl := Label.new()
+	lbl.text = "TURN  %d  /  %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
+	lbl.add_theme_font_size_override("font_size", 28)
+	lbl.add_theme_color_override("font_color", Color(0.910, 0.753, 0.407, 1.0))
+	lbl.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	lbl.add_theme_constant_override("outline_size", 6)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ribbon.add_child(lbl)
+
+	layer.add_child(ribbon)
+	# Fit the container to the label.
+	ribbon.force_update_transform()
+	# Position from screen: entry from the left edge, target at horizontal centre
+	# one-fifth down from the top; exit off the right edge.
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	await get_tree().process_frame
+	var ribbon_size: Vector2 = ribbon.size
+	var target_y: float = viewport_size.y * 0.18
+	ribbon.position = Vector2(-ribbon_size.x, target_y)
+	var centre_x: float = (viewport_size.x - ribbon_size.x) * 0.5
+	var exit_x: float = viewport_size.x + 20.0
+
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ribbon, "position:x", centre_x, 0.35)
+	tw.tween_interval(1.05)
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_property(ribbon, "position:x", exit_x, 0.35)
+	tw.tween_callback(ribbon.queue_free)
 
 
 func _render_state() -> void:
 	turn_label.text = "Turn %d / %d" % [world_simulation.turn_index + 1, world_simulation.turns_total]
 	var s: Dictionary = world_simulation.world_state
-	var target: int = int(config.get("win_conditions", {}).get("target_control_regions", 7))
+	var target: int = int(config.get("win_conditions", {}).get(
+		"target_control_regions", WorldSimulationClass.DEFAULT_TARGET_CONTROL_REGIONS))
 
-	stat_stability.text = str(int(s.get("stability", 0)))
-	stat_influence.text = str(int(s.get("influence", 0)))
-	stat_resources.text = str(int(s.get("resources", 0)))
-	stat_crisis.text = str(int(s.get("crisis", 0)))
-	stat_control.text = "%d / %d" % [int(s.get("control_regions", 0)), target]
+	_tween_stat_number(stat_stability, int(s.get("stability", 0)))
+	_tween_stat_number(stat_influence, int(s.get("influence", 0)))
+	_tween_stat_number(stat_resources, int(s.get("resources", 0)))
+	_tween_stat_number(stat_crisis, int(s.get("crisis", 0)))
+	_tween_stat_number(stat_control, int(s.get("control_regions", 0)), target)
 
 	# Tint crisis value red when it's climbing to warn the player.
 	var crisis: int = int(s.get("crisis", 0))
@@ -162,9 +224,65 @@ func _render_state() -> void:
 	elif crisis >= 30:
 		crisis_col = Color(0.780, 0.604, 0.235, 1.0)        # O3 signature gold
 	stat_crisis.add_theme_color_override("font_color", crisis_col)
+	# Above the alarm threshold we pulse the whole Crisis row's modulate so
+	# the player feels the danger even peripherally. Below threshold, we let
+	# any lingering alarm tween decay back to 1.0.
+	_update_crisis_alarm(crisis)
 
 	progress_label.text = "Decision %d / %d this turn" % [current_event_index + 1, max(1, decisions_this_turn)]
 	_refresh_region_map()
+
+
+# Tween helper: counts from the label's current numeric value up/down to the
+# new value over 0.35 s with cubic-out easing. Uses an int interpolation so the
+# label never shows fractional values. Supports "N / M" format via max_value.
+func _tween_stat_number(label: Label, target_value: int, max_value: int = -1) -> void:
+	if label == null:
+		return
+	# Godot 4.6 logs an error from get_meta even when a default is provided and
+	# the meta is unset, so we gate on has_meta to keep _render_state quiet.
+	if label.has_meta("count_tw"):
+		var existing: Tween = label.get_meta("count_tw")
+		if existing is Tween and existing.is_valid():
+			existing.kill()
+	var current_text: String = label.text
+	var current_value: int = _parse_leading_int(current_text)
+	# Nothing to animate.
+	if current_value == target_value:
+		_write_stat_text(label, target_value, max_value)
+		return
+	var duration: float = 0.35 if absi(target_value - current_value) >= 3 else 0.18
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# method_bind lambda that writes the lerped integer into the label each tick.
+	tw.tween_method(
+		func(v: float) -> void:
+			_write_stat_text(label, int(round(v)), max_value),
+		float(current_value), float(target_value), duration
+	)
+	label.set_meta("count_tw", tw)
+
+
+func _write_stat_text(label: Label, value: int, max_value: int) -> void:
+	if max_value >= 0:
+		label.text = "%d / %d" % [value, max_value]
+	else:
+		label.text = str(value)
+
+
+func _parse_leading_int(s: String) -> int:
+	var out: String = ""
+	for i in range(s.length()):
+		var ch: String = s[i]
+		if ch == "-" and out == "":
+			out += ch
+		elif ch >= "0" and ch <= "9":
+			out += ch
+		else:
+			break
+	if out == "" or out == "-":
+		return 0
+	return int(out)
 
 
 func _refresh_region_map() -> void:
@@ -172,6 +290,36 @@ func _refresh_region_map() -> void:
 		return
 	if region_map.has_method("refresh"):
 		region_map.refresh(world_simulation.regions_snapshot())
+
+
+# When crisis crosses 50 we pulse the whole row so the player can't miss it;
+# the existing Value label colour ramp already handles <30 and 30-49.
+# We keep a single sticky tween on the row: start it on rising edge, stop and
+# reset modulate when crisis drops back under threshold.
+const _CRISIS_ALARM_THRESHOLD: int = 50
+var _crisis_alarm_active: bool = false
+
+func _update_crisis_alarm(crisis: int) -> void:
+	if not is_instance_valid(stat_crisis_row):
+		return
+	var should_alarm: bool = crisis >= _CRISIS_ALARM_THRESHOLD
+	if should_alarm and not _crisis_alarm_active:
+		_crisis_alarm_active = true
+		var tw := create_tween()
+		tw.set_loops()
+		tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(stat_crisis_row, "modulate", Color(1.15, 0.80, 0.80, 1.0), 0.55)
+		tw.tween_property(stat_crisis_row, "modulate", Color(1.00, 1.00, 1.00, 1.0), 0.55)
+		stat_crisis_row.set_meta("alarm_tw", tw)
+	elif not should_alarm and _crisis_alarm_active:
+		_crisis_alarm_active = false
+		if stat_crisis_row.has_meta("alarm_tw"):
+			var existing: Tween = stat_crisis_row.get_meta("alarm_tw")
+			if existing is Tween and existing.is_valid():
+				existing.kill()
+		var cooldown := create_tween()
+		cooldown.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		cooldown.tween_property(stat_crisis_row, "modulate", Color(1, 1, 1, 1), 0.25)
 
 
 func _render_current_event() -> void:
@@ -212,12 +360,22 @@ func _render_current_event() -> void:
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.custom_minimum_size = Vector2(min_size.x, min_size.y)
 		button.disabled = _awaiting_region_pick
+		# Tell the VBox to honour our min size and keep each row independent,
+		# so no stray measurement collapses rows onto each other (see BUG-001).
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.clip_text = false
 		button.pressed.connect(_on_choice_selected.bind(choice))
 		# Attach a tag chip on the left of the text so players can read the
 		# "flavour" of each option at a glance (force/diplomacy/science/etc.).
 		var tag: String = String(choice.get("tag", "")) if choice.has("tag") else _infer_choice_tag(choice)
 		_apply_choice_chip(button, tag)
+		_wire_choice_hover(button)
 		choices_container.add_child(button)
+
+	# Force the VBoxContainer to re-sort on this same frame. Without this, a
+	# late `modulate` assignment could theoretically land before the container
+	# positions each child, which would stack all buttons at y=0 (BUG-001).
+	choices_container.queue_sort()
 
 	_render_state()
 	_animate_event_reveal()
@@ -236,6 +394,39 @@ func _begin_region_pick_mode(event_data: Dictionary) -> void:
 		String(event_data.get("description", "")),
 		prompt
 	]
+	# Insert a bold gold hint banner at the top of the choices stack so the
+	# player never reads the disabled buttons as "UI is broken". Removed by
+	# _end_region_pick_mode (via the blanket choices_container clear on next
+	# render) or the node is free'd when we leave the mode.
+	var hint := Label.new()
+	hint.name = "RegionPickHint"
+	hint.text = "[!] " + prompt
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.add_theme_font_size_override("font_size", 18)
+	hint.add_theme_color_override("font_color", Color(0.910, 0.753, 0.407, 1.0))  # O4 gold
+	hint.add_theme_color_override("font_outline_color", Color(0.059, 0.039, 0.055, 1.0))
+	hint.add_theme_constant_override("outline_size", 4)
+	hint.modulate.a = 0.0
+	choices_container.add_child(hint)
+	choices_container.move_child(hint, 0)
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(hint, "modulate:a", 1.0, 0.28)
+	# Pulse the hint alpha between 1.0 and 0.72 forever (3 Hz breath) so it
+	# reads as "active input surface elsewhere on screen".
+	_start_hint_breath(hint)
+
+
+func _start_hint_breath(hint: Label) -> void:
+	if not is_instance_valid(hint):
+		return
+	var bw := create_tween()
+	bw.set_loops()
+	bw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	bw.tween_property(hint, "modulate:a", 0.72, 0.6)
+	bw.tween_property(hint, "modulate:a", 1.00, 0.6)
+	hint.set_meta("breath_tw", bw)
 
 
 func _end_region_pick_mode() -> void:
@@ -399,6 +590,30 @@ func _apply_choice_chip(button: Button, tag: String) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
+# Warm, subtle hover breathing for choice buttons. Keeps the UI feeling
+# reactive without jumping around the layout — only modulate is animated.
+func _wire_choice_hover(button: Button) -> void:
+	button.pivot_offset = button.size * 0.5
+	button.resized.connect(func(): button.pivot_offset = button.size * 0.5)
+	button.mouse_entered.connect(func(): _hover_choice(button, true))
+	button.mouse_exited.connect(func(): _hover_choice(button, false))
+
+
+func _hover_choice(button: Button, entering: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	if button.has_meta("hover_tw"):
+		var kill: Tween = button.get_meta("hover_tw")
+		if kill is Tween and kill.is_valid():
+			kill.kill()
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	var target_mod: Color = Color(1.08, 1.04, 0.96, 1.0) if entering else Color(1, 1, 1, 1)
+	tw.tween_property(button, "modulate", target_mod, 0.18)
+	button.set_meta("hover_tw", tw)
+
+
 # --- Stat delta floaters ---------------------------------------------------
 # Pops a short "+5" / "-3" label above each HUD stat whenever a decision
 # changes it. Colour-coded so crisis-up reads as bad and the rest read
@@ -505,8 +720,30 @@ func _finalize_turn() -> void:
 	_refresh_region_map()
 	if region_map and region_map.has_method("trigger_turn_flash"):
 		region_map.trigger_turn_flash(0.65)
+
+	# Refresh the HUD with the post-passive, post-advance state BEFORE we
+	# evaluate outcome so the numbers the player reads on-screen match the
+	# numbers the simulation is judging the run against (see BUG-006).
+	_render_state()
+
 	var evaluation: Dictionary = world_simulation.evaluate_outcome()
-	if String(evaluation.get("outcome", "ongoing")) == "ongoing":
+	var outcome: String = String(evaluation.get("outcome", "ongoing"))
+
+	# One-line trace so any spurious end-of-run (see BUG-002) leaves forensic
+	# evidence in the logs. Cheap, emitted exactly once per turn transition.
+	var ev_state: Dictionary = evaluation.get("state", {})
+	print("[RunScene] turn=%d/%d outcome=%s stab=%d inf=%d res=%d crisis=%d control=%d" % [
+		world_simulation.turn_index,
+		world_simulation.turns_total,
+		outcome,
+		int(ev_state.get("stability", 0)),
+		int(ev_state.get("influence", 0)),
+		int(ev_state.get("resources", 0)),
+		int(ev_state.get("crisis", 0)),
+		int(ev_state.get("control_regions", 0)),
+	])
+
+	if outcome == "ongoing":
 		_start_turn()
 		return
 
@@ -549,13 +786,31 @@ func _finish_run(evaluation: Dictionary) -> void:
 	# Show the outcome overlay (Victory/Defeat/Timeout) before handing off to
 	# MetaHub. The overlay waits for user input or auto-advances after its
 	# internal hold, then signals `finished` so we can change scene.
-	var outcome: String = String(run_result.get("outcome", "ongoing"))
+	# `WorldSimulation.evaluate_outcome` emits "win/loss/timeout/ongoing" but the
+	# overlay dictionaries are keyed by "victory/chapter_cleared/defeat/loss/..."
+	# so translate here to keep the mood-specific title+subtitle+portrait wired.
+	var raw_outcome: String = String(run_result.get("outcome", "ongoing"))
+	var overlay_outcome: String = _overlay_outcome_for(raw_outcome, chapter_goal_completed)
 	if run_end_overlay and run_end_overlay.has_method("show_outcome"):
 		if not run_end_overlay.finished.is_connected(_on_run_end_finished):
 			run_end_overlay.finished.connect(_on_run_end_finished, CONNECT_ONE_SHOT)
-		run_end_overlay.show_outcome(outcome)
+		run_end_overlay.show_outcome(overlay_outcome)
 	else:
 		get_tree().change_scene_to_file("res://scenes/MetaHub.tscn")
+
+
+# Translates a WorldSimulation outcome ("win/loss/timeout/ongoing") into the
+# mood key expected by RunEndOverlay ("victory/chapter_cleared/defeat/timeout/
+# ongoing"). Keeping the translation here means the sim stays domain-pure and
+# the overlay keeps its narrative vocabulary.
+func _overlay_outcome_for(raw_outcome: String, chapter_goal_completed: bool) -> String:
+	match raw_outcome:
+		"win":
+			return "chapter_cleared" if chapter_goal_completed else "victory"
+		"loss":
+			return "defeat"
+		_:
+			return raw_outcome
 
 
 func _on_run_end_finished() -> void:

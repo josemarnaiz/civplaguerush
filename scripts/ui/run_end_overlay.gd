@@ -71,6 +71,17 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 	set_process(false)
+	# Clear any placeholder text that might ship inside RunEndOverlay.tscn so a
+	# late layout hiccup / tool inspection never surfaces a misleading "VICTORY".
+	if _title_label:
+		_title_label.text = ""
+	if _subtitle_label:
+		_subtitle_label.text = ""
+	if _hint_label:
+		_hint_label.text = ""
+	if _portrait:
+		_portrait.texture = null
+		_portrait.visible = false
 
 
 func show_outcome(outcome: String) -> void:
@@ -79,6 +90,12 @@ func show_outcome(outcome: String) -> void:
 	_active = true
 	_time = 0.0
 	_dismiss_allowed_at = 0.6
+
+	# Warn (don't crash) when a caller passes an outcome the overlay can't mood-map.
+	# This catches BUG-003-class regressions where WorldSimulation emits a string
+	# (e.g. "win") that none of our dictionaries recognize.
+	if not TITLE_BY_OUTCOME.has(_outcome):
+		push_warning("RunEndOverlay.show_outcome: unknown outcome '%s'. Falling back to 'RUN OVER'. Callers should translate sim outcomes (win/loss) into overlay moods (victory/defeat)." % _outcome)
 
 	var portrait_path: String = String(ADVISOR_BY_OUTCOME.get(_outcome, ADVISOR_BY_OUTCOME["ongoing"]))
 	var tex: Texture2D = load(portrait_path) if ResourceLoader.exists(portrait_path) else null
